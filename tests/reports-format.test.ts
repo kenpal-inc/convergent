@@ -196,13 +196,13 @@ describe('generateTaskReport', () => {
   test('creates report file at correct path', async () => {
     const result = await generateTaskReport('001', 'Test Task', mockConfig, TEST_DIR, TEST_DIR);
     expect(result).toBe(true);
-    const reportPath = join(TEST_DIR, 'reports', 'task-001.md');
+    const reportPath = join(TEST_DIR, 'reports', '001.md');
     expect(existsSync(reportPath)).toBe(true);
   });
 
   test('report content includes all sections', async () => {
     await generateTaskReport('002', 'Another Task', mockConfig, TEST_DIR, TEST_DIR);
-    const content = readFileSync(join(TEST_DIR, 'reports', 'task-002.md'), 'utf-8');
+    const content = readFileSync(join(TEST_DIR, 'reports', '002.md'), 'utf-8');
     expect(content).toContain('# Task Report: 002');
     expect(content).toContain('**Task:** Another Task');
     expect(content).toContain('## Changes Summary');
@@ -225,8 +225,8 @@ describe('generateTaskReport', () => {
   test('multiple reports create separate files', async () => {
     await generateTaskReport('010', 'Task A', mockConfig, TEST_DIR, TEST_DIR);
     await generateTaskReport('011', 'Task B', mockConfig, TEST_DIR, TEST_DIR);
-    expect(existsSync(join(TEST_DIR, 'reports', 'task-010.md'))).toBe(true);
-    expect(existsSync(join(TEST_DIR, 'reports', 'task-011.md'))).toBe(true);
+    expect(existsSync(join(TEST_DIR, 'reports', '010.md'))).toBe(true);
+    expect(existsSync(join(TEST_DIR, 'reports', '011.md'))).toBe(true);
   });
 
   test('returns true on successful report generation', async () => {

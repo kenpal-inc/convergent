@@ -19,7 +19,8 @@ function isTransientError(response: ClaudeResponse): boolean {
     msg.includes("503") ||
     msg.includes("502") ||
     msg.includes("connection") ||
-    msg.includes("timeout") ||
+    msg.includes("timed out") ||
+    msg.includes("request timeout") ||
     msg.includes("econnreset") ||
     msg.includes("socket hang up")
   );

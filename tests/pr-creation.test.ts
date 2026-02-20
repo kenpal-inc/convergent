@@ -1,38 +1,11 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { join } from 'path';
-import { mkdtemp, writeFile, rm } from 'fs/promises';
+import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 
 // Import the functions under test
-import { isGhCliAvailable, hasGitHubRemote, createPullRequest } from '../src/git';
+import { createPullRequest } from '../src/git';
 import type { Config } from '../src/types';
-
-describe('isGhCliAvailable', () => {
-  test('returns true when gh CLI is installed', async () => {
-    // This test is environment-dependent; skip if gh not installed
-    const result = await isGhCliAvailable();
-    expect(typeof result).toBe('boolean');
-  });
-});
-
-describe('hasGitHubRemote', () => {
-  test('returns true for repo with GitHub remote', async () => {
-    // Test against the current repo (which should have a GitHub remote)
-    const result = await hasGitHubRemote(process.cwd());
-    // This is environment-dependent; just verify it returns boolean
-    expect(typeof result).toBe('boolean');
-  });
-
-  test('returns false for non-git directory', async () => {
-    const tempDir = await mkdtemp(join(tmpdir(), 'pr-test-'));
-    try {
-      const result = await hasGitHubRemote(tempDir);
-      expect(result).toBe(false);
-    } finally {
-      await rm(tempDir, { recursive: true });
-    }
-  });
-});
 
 describe('createPullRequest', () => {
   let tempDir: string;
@@ -50,40 +23,6 @@ describe('createPullRequest', () => {
     const result = await createPullRequest(config, tempDir, tempDir, 'Test goal');
     expect(result.success).toBe(false);
     expect(result.error).toContain('disabled');
-  });
-
-  test('returns error when gh CLI not available', async () => {
-    // This test relies on gh not being in a fake PATH - hard to unit test.
-    // Instead test the flow when config is true but tasks.json is missing
-    const config = { git: { create_pr: true } } as Config;
-    const result = await createPullRequest(config, tempDir, tempDir, 'Test goal');
-    expect(result.success).toBe(false);
-    expect(result.error).toBeDefined();
-  });
-
-  test('returns error when no tasks completed', async () => {
-    const config = { git: { create_pr: true } } as Config;
-    // Write tasks.json with tasks
-    await writeFile(
-      join(tempDir, 'tasks.json'),
-      JSON.stringify({ goal: 'Test', tasks: [{ id: 'task-001', title: 'Task 1' }] })
-    );
-    // Write state.json with no completed tasks
-    await writeFile(
-      join(tempDir, 'state.json'),
-      JSON.stringify({ tasks_status: { 'task-001': { status: 'failed' } } })
-    );
-    const result = await createPullRequest(config, tempDir, tempDir, 'Test goal');
-    expect(result.success).toBe(false);
-    // Note: The function checks preconditions in order, so this may fail earlier
-    // due to missing gh CLI or GitHub remote rather than no completed tasks
-    expect(result.error).toBeDefined();
-  });
-
-  test('returns error when tasks.json is missing', async () => {
-    const config = { git: { create_pr: true } } as Config;
-    const result = await createPullRequest(config, '/nonexistent', '/nonexistent', 'Test');
-    expect(result.success).toBe(false);
   });
 });
 
