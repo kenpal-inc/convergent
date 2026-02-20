@@ -1,5 +1,9 @@
 # convergent
 
+[![CI](https://github.com/kenpal-inc/convergent/actions/workflows/test.yml/badge.svg)](https://github.com/kenpal-inc/convergent/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Bun](https://img.shields.io/badge/runtime-Bun-%23fbf0df?logo=bun)](https://bun.sh/)
+
 Autonomous development orchestrator for Claude Code. Give it a codebase context and a goal — it decomposes work into tasks and uses a **convergent evolution** approach: multiple AI personas independently design solutions, then a synthesizer merges the best elements into an optimal implementation plan.
 
 ## How It Works
@@ -71,13 +75,21 @@ Results from `explore` tasks (`findings.md`) are automatically injected into the
 
 Tools permitted in the user's `~/.claude/settings.json` (Playwright CLI, MCP tools, etc.) are automatically available to `explore` and `command` tasks.
 
+## Installation
+
+```bash
+# Install via curl (requires Bun)
+curl -fsSL https://raw.githubusercontent.com/kenpal-inc/convergent/main/install.sh | bash
+```
+
+### Prerequisites
+
+- [Bun](https://bun.sh/) (>=1.0.0)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (`claude` command)
+
 ## Quick Start
 
 ```bash
-# Prerequisites: Bun, claude CLI
-bun --version
-claude --version
-
 # Run on your project
 convergent \
   --context "docs/,src/,README.md" \
