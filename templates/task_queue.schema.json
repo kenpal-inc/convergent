@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique task identifier, e.g. task-001"
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title of the task"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["code", "explore", "command"],
+            "description": "Task type. code: write/modify source code (default). explore: investigate, test, or gather information using browser or CLI tools, then output findings. command: execute a specific command (deploy, migrate, etc)."
+          },
+          "description": {
+            "type": "string",
+            "description": "Detailed description of what needs to be done"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "IDs of tasks that must complete before this one"
+          },
+          "context_files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "File paths relevant to this task (to read or modify)"
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Conditions that must be true when the task is complete"
+          },
+          "estimated_complexity": {
+            "type": "string",
+            "enum": ["trivial", "standard", "complex"],
+            "description": "trivial: 1 file, simple change. standard: 2-5 files. complex: 6+ files or architectural change."
+          }
+        },
+        "required": ["id", "title", "description", "depends_on", "context_files", "acceptance_criteria", "estimated_complexity"]
+      }
+    }
+  },
+  "required": ["tasks"]
+}

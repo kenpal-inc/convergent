@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "properties": {
+    "approach_summary": {
+      "type": "string",
+      "description": "Brief summary of the proposed implementation approach"
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "File path relative to project root"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["create", "modify", "delete"]
+          },
+          "description": {
+            "type": "string",
+            "description": "What changes to make in this file"
+          },
+          "key_changes": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Specific changes: new functions, modified logic, etc."
+          }
+        },
+        "required": ["path", "action", "description"]
+      }
+    },
+    "new_dependencies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "New npm packages or other dependencies to add"
+    },
+    "test_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "What this test verifies"
+          },
+          "file": {
+            "type": "string",
+            "description": "Test file path"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["unit", "integration", "e2e"]
+          }
+        },
+        "required": ["description"]
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Potential risks or issues with this approach"
+    }
+  },
+  "required": ["approach_summary", "files", "test_cases"]
+}

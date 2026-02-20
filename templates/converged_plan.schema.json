@@ -1,0 +1,85 @@
+{
+  "type": "object",
+  "properties": {
+    "convergent_decisions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Design decisions where most personas agreed"
+    },
+    "resolved_divergences": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "The point of disagreement"
+          },
+          "chosen_approach": {
+            "type": "string",
+            "description": "The approach selected"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Why this approach was chosen over alternatives"
+          }
+        },
+        "required": ["topic", "chosen_approach", "rationale"]
+      },
+      "description": "Points where personas disagreed and how they were resolved"
+    },
+    "unique_insights_adopted": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Valuable ideas from individual personas that others missed"
+    },
+    "implementation_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "order": {
+            "type": "integer",
+            "description": "Execution order (1-based)"
+          },
+          "description": {
+            "type": "string",
+            "description": "What to do in this step"
+          },
+          "file_path": {
+            "type": "string",
+            "description": "Primary file to create or modify"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["create", "modify", "delete"]
+          },
+          "detailed_instructions": {
+            "type": "string",
+            "description": "Specific implementation instructions: function signatures, logic, imports, etc."
+          }
+        },
+        "required": ["order", "description", "file_path", "action", "detailed_instructions"]
+      }
+    },
+    "test_plan": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_path": {
+            "type": "string",
+            "description": "Test file path"
+          },
+          "test_cases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of test case descriptions"
+          }
+        },
+        "required": ["file_path", "test_cases"]
+      }
+    }
+  },
+  "required": ["convergent_decisions", "implementation_steps", "test_plan"]
+}

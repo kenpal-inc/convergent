@@ -1,0 +1,90 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["approved", "changes_requested"],
+      "description": "Overall review verdict"
+    },
+    "summary": {
+      "type": "string",
+      "description": "1-3 sentence summary of the review findings"
+    },
+    "plan_compliance": {
+      "type": "object",
+      "properties": {
+        "compliant": {
+          "type": "boolean",
+          "description": "Whether the implementation follows the converged plan"
+        },
+        "missing_steps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Implementation steps from the plan that are missing in the diff"
+        },
+        "extra_changes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Changes in the diff that were not part of the plan"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about plan compliance"
+        }
+      },
+      "required": ["compliant", "missing_steps", "extra_changes"]
+    },
+    "acceptance_criteria_check": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "description": "The acceptance criterion being checked"
+          },
+          "satisfied": {
+            "type": "boolean",
+            "description": "Whether this criterion appears to be satisfied"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Brief explanation of why this criterion is or is not satisfied"
+          }
+        },
+        "required": ["criterion", "satisfied", "evidence"]
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": ["error", "warning", "info"],
+            "description": "error: must fix. warning: should fix. info: suggestion."
+          },
+          "category": {
+            "type": "string",
+            "enum": ["plan_deviation", "security", "error_handling", "pattern_violation", "unnecessary_change", "missing_implementation", "other"]
+          },
+          "file_path": {
+            "type": "string",
+            "description": "File path where the issue was found"
+          },
+          "description": {
+            "type": "string",
+            "description": "Clear description of the issue"
+          },
+          "suggestion": {
+            "type": "string",
+            "description": "Actionable suggestion for fixing the issue"
+          }
+        },
+        "required": ["severity", "category", "description"]
+      }
+    }
+  },
+  "required": ["verdict", "summary", "plan_compliance", "acceptance_criteria_check", "issues"]
+}
