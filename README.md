@@ -1,200 +1,199 @@
 # convergent
 
-Claude Code 向け自律開発オーケストレーター。ゴールとコンテキストを受け取り、タスクに分解して**収斂進化**アプローチで実装する — 複数のAIペルソナが独立して解決策を設計し、それらを最適な実装プランに統合する。
+Autonomous development orchestrator for Claude Code. Give it a codebase context and a goal — it decomposes work into tasks and uses a **convergent evolution** approach: multiple AI personas independently design solutions, then a synthesizer merges the best elements into an optimal implementation plan.
 
-## 仕組み
+## How It Works
 
 ```
-Phase 0: タスク生成
-  入力: --context（ファイル/ディレクトリ）+ --goal（自然言語）+ --instructions（任意）
-  → 依存関係付きの構造化タスクキューを生成
-  → 各タスクにタイプを割り当て: code | explore | command
+Phase 0: Task Generation
+  Input: --context (files/dirs) + --goal (natural language) + --instructions (optional)
+  → Generates a structured task queue with dependency graph
+  → Assigns task types: code | explore | command
         │
         ▼
-┌─────────────────────────────────────────────────────┐
-│ タスクタイプによる分岐:                               │
-│                                                     │
-│ [code タスク] ── Phase A → Phase B → 検証 → Phase C  │
-│ [explore タスク] ── 直接実行（調査・テスト → 報告）    │
-│ [command タスク] ── 直接実行（デプロイ・コマンド実行）  │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ Branching by task type:                                     │
+│                                                             │
+│ [code]    ── Phase A → Phase B → Verify → Phase C → Commit  │
+│ [explore] ── Direct execution (investigation → findings.md) │
+│ [command] ── Direct execution (deploy, run scripts, etc.)   │
+└─────────────────────────────────────────────────────────────┘
 
-code タスクのフロー:
-  Phase A: 収斂進化
-    → 3〜7のペルソナを並列起動（各ペルソナはRead/Glob/Grepツール使用可能）
-    → 高コンセンサス検出時は早期終了
-    → シンセサイザーが最適プランを合成
+code task flow:
+  Phase A: Convergent Evolution
+    → Spawns 3–7 personas in parallel (each with Read/Glob/Grep access)
+    → Early termination on high consensus
+    → Synthesizer merges the optimal plan
           │
           ▼
-  Phase B: 実装
-    → 収斂プランを実行（過去タスクの学習 + 探索結果を含むコンテキスト）
-    → 検証を実行（lint, typecheck, test）→ 失敗時リトライ
+  Phase B: Implementation
+    → Executes the converged plan (with learnings + explore findings as context)
+    → Runs verification (lint, typecheck, test) → retries on failure
           │
           ▼
-  Phase C: マルチペルソナ・コードレビュー
-    → 3つの専門レビュアーが並列に審査
-    → 全員 approved → コミット / changes_requested → リトライ
+  Phase C: Multi-Persona Code Review
+    → 3 specialist reviewers audit in parallel
+    → All approved → commit / changes_requested → retry
 
-explore タスクのフロー:
-  → ユーザー設定の全ツール（Playwright CLI 等）を使って調査
-  → 結果を findings.md に記録 → 後続タスクのコンテキストに自動伝播
+explore task flow:
+  → Investigates using all user-permitted tools (Playwright CLI, MCP tools, etc.)
+  → Records results to findings.md → auto-propagated to dependent tasks
 
-command タスクのフロー:
-  → 指定コマンドを実行 → 成否を判定
+command task flow:
+  → Executes the specified command → reports success/failure
 
-次のタスクへ（全タスク完了または予算超過までループ）
+Loops until all tasks complete or budget is exhausted.
 ```
 
-### 収斂進化とは
+### What Is Convergent Evolution?
 
-核となるアイデア：異なる優先度を持つ複数の独立エージェントが同じ問題を分析したとき、それらが**収斂する**要素はおそらく最良のアプローチである。意見の相違はシンセサイザーが各視点の根拠を重み付けして解決する。
+The core idea: when multiple independent agents with different priorities analyze the same problem, the elements they **converge on** are likely the best approach. Disagreements are resolved by a synthesizer that weighs the rationale behind each perspective.
 
-ペルソナはタスクの複雑度に応じて割り当てられる：
+Personas are assigned based on task complexity:
 
-| 複雑度 | ペルソナ | ユースケース |
-|--------|----------|-------------|
-| `trivial` | なし（直接プラン生成） | 単一ファイル、簡単な変更 |
-| `standard` | pragmatist, tdd, security | 2〜5ファイル、中程度のロジック |
-| `complex` | 全7ペルソナ | 6ファイル以上、アーキテクチャ変更 |
+| Complexity | Personas | Use Case |
+|------------|----------|----------|
+| `trivial` | None (direct plan generation) | Single file, simple changes |
+| `standard` | pragmatist, tdd, security | 2–5 files, moderate logic |
+| `complex` | All 7 personas | 6+ files, architectural changes |
 
-### タスクタイプ
+### Task Types
 
-Phase 0 はゴールを分析して各タスクに適切なタイプを自動で割り当てる：
+Phase 0 analyzes the goal and automatically assigns the appropriate type to each task:
 
-| タイプ | 用途 | Phase A | 検証 | レビュー |
-|--------|------|---------|------|----------|
-| `code` | コードの実装・修正（デフォルト） | ペルソナ収斂 | lint/typecheck/test | マルチペルソナレビュー |
-| `explore` | 探索的テスト・調査・情報収集 | スキップ | なし | なし |
-| `command` | デプロイ・マイグレーション等のコマンド実行 | スキップ | なし | なし |
+| Type | Purpose | Phase A | Verify | Review |
+|------|---------|---------|--------|--------|
+| `code` | Code implementation/modification (default) | Persona convergence | lint/typecheck/test | Multi-persona review |
+| `explore` | Exploratory testing, investigation, information gathering | Skipped | None | None |
+| `command` | Deploy, migration, script execution | Skipped | None | None |
 
-`explore` タスクの結果（findings.md）は、後続タスクのコンテキストに自動で注入される。例えば「探索テストでバグを発見 → コードで修正」というフローが自然に実現できる。
+Results from `explore` tasks (`findings.md`) are automatically injected into the context of dependent tasks. For example, "find bugs via exploratory testing → fix them in code" flows naturally.
 
-ユーザーの `~/.claude/settings.json` で許可されたツール（Playwright CLI、MCP ツール等）は、`explore` / `command` タスクで自動的に利用可能。
+Tools permitted in the user's `~/.claude/settings.json` (Playwright CLI, MCP tools, etc.) are automatically available to `explore` and `command` tasks.
 
-## クイックスタート
+## Quick Start
 
 ```bash
-# 前提条件: Bun, claude CLI
-# 確認:
+# Prerequisites: Bun, claude CLI
 bun --version
 claude --version
 
-# プロジェクトで実行
+# Run on your project
 convergent \
   --context "docs/,src/,README.md" \
-  --goal "JWT トークンによるユーザー認証を実装する"
+  --goal "Implement user authentication with JWT tokens"
 ```
 
-## 使い方
+## Usage
 
 ```bash
-# 完全自律実行
+# Fully autonomous execution
 convergent \
   --context "docs/,src/,memo/remaining-tasks.md" \
-  --goal "remaining-tasks.md の残タスクをすべて実装する"
+  --goal "Implement all remaining tasks in remaining-tasks.md"
 
-# 自然言語の指示だけで実行（goal, context は自動推定）
+# Natural language instructions only (goal and context auto-derived)
 convergent \
-  --instructions "認証をJWTからセッションベースに変更。ユーザーモデルにroleフィールドを追加"
+  --instructions "Switch auth from JWT to session-based. Add a role field to the user model"
 
-# ファイルから指示を読み込み（TODO.md など）
+# Read instructions from a file (e.g., TODO.md)
 convergent --instructions-file ./TODO.md
 
-# 探索的テスト → バグ修正 → デプロイ（explore/code/command タスクの混合）
+# Exploratory testing → bug fix → deploy (mixed explore/code/command tasks)
 convergent \
-  --instructions "本番環境を Playwright CLI で探索的にテストし、見つかったバグを修正してデプロイする"
+  --instructions "Run exploratory tests on production with Playwright CLI, fix any bugs found, then deploy"
 
-# goal + instructions で方向性と具体的指示を分けて指定
+# Separate goal (direction) and instructions (specifics)
 convergent \
-  --context "src/" --goal "ECサイトのバックエンド改善" \
-  --instructions "認証をJWTからセッションベースに変更。ユーザーモデルにroleフィールドを追加"
+  --context "src/" --goal "Improve e-commerce backend" \
+  --instructions "Switch auth from JWT to session-based. Add a role field to the user model"
 
-# タスクキュー生成のみ（実行前に確認）
+# Generate task queue only (review before executing)
 convergent \
   --context "src/" \
-  --goal "TypeScript の型エラーをすべて修正する" \
+  --goal "Fix all TypeScript type errors" \
   --review
 
-# 中断後の再開（Ctrl+C）
+# Resume after interruption (Ctrl+C)
 convergent --resume
 
-# 失敗タスクをリセットして再試行
+# Reset failed tasks and retry
 convergent --resume --retry-failed
 
-# プラン生成まで（実装なし）で確認
+# Plan generation only (no implementation)
 convergent \
   --context "src/" \
-  --goal "認証機能を実装する" \
+  --goal "Implement authentication" \
   --dry-run
 
-# タスクキューを自然言語で修正（--review 後に使用）
+# Refine task queue with natural language (after --review)
 convergent \
-  --refine "task-001は不要、削除して。task-003の複雑度をstandardに変更"
+  --refine "Remove task-001, it's unnecessary. Change task-003 complexity to standard"
 
-# 予算とモデルを指定
+# Set budget and model
 convergent \
   --context "." \
-  --goal "ダークモード対応を追加する" \
+  --goal "Add dark mode support" \
   --max-budget 20.00 \
   --model opus
 ```
 
-### オプション
+### Options
 
-| オプション | 説明 |
-|-----------|------|
-| `--context <paths>` | カンマ区切りの分析対象ファイル/ディレクトリ |
-| `--goal <text>` | 達成したいこと（自然言語） |
-| `--instructions <text>` | タスク生成への具体的な指示（自然言語） |
-| `--instructions-file <path>` | ファイルから指示を読み込み（TODO.md 等） |
-| `--resume` | `.convergent/state.json` から再開 |
-| `--retry-failed` | `--resume` 時に failed/blocked タスクを pending にリセットして再試行 |
-| `--review` | タスク生成後に停止して確認 |
-| `--dry-run` | Phase 0 + Phase A のみ実行（プラン生成まで、実装なし） |
-| `--refine <text>` | 最新のタスクキューを自然言語の指示で修正 |
-| `--config <path>` | カスタム設定ファイル |
-| `--max-budget <USD>` | 予算上限（デフォルト: $50） |
-| `--model <model>` | 全フェーズのモデルを上書き |
-| `--verbose` | デバッグログ出力 |
+| Option | Description |
+|--------|-------------|
+| `--context <paths>` | Comma-separated files/directories to analyze |
+| `--goal <text>` | What to achieve (natural language) |
+| `--instructions <text>` | Specific instructions for task generation (natural language) |
+| `--instructions-file <path>` | Read instructions from a file (e.g., TODO.md) |
+| `--resume` | Resume from `.convergent/state.json` |
+| `--retry-failed` | With `--resume`, reset failed/blocked tasks to pending |
+| `--review` | Stop after Phase 0 (task generation) for review |
+| `--dry-run` | Run Phase 0 + Phase A only (plan generation, no implementation) |
+| `--refine <text>` | Refine the latest task queue with natural language |
+| `--config <path>` | Custom config file |
+| `--max-budget <USD>` | Budget cap (default: $50) |
+| `--model <model>` | Override model for all phases |
+| `--verbose` | Enable debug logging |
 
-### レビュー → 修正 → 実行ワークフロー
+### Review → Refine → Execute Workflow
 
-`--review` と `--refine` を組み合わせることで、実行前にタスクキューを精査・修正できる：
+Combine `--review` and `--refine` to inspect and adjust the task queue before execution:
 
 ```bash
-# 1. タスクキューを生成して確認
+# 1. Generate and review task queue
 convergent \
-  --context "src/" --goal "認証機能を実装する" --review
+  --context "src/" --goal "Implement authentication" --review
 
-# 2. 自然言語でタスクキューを修正（繰り返し可能）
+# 2. Refine with natural language (repeatable)
 convergent \
-  --refine "task-001は不要。task-003にE2Eテストの受入基準を追加して"
+  --refine "Remove task-001. Add E2E test acceptance criteria to task-003"
 
-# 3. 納得したら実行
+# 3. Execute when satisfied
 convergent --resume
 ```
 
-`--refine` は何度でも実行できる。各回で最新の `tasks.json` を読み込み、指示に基づいて修正する。
+`--refine` can be run multiple times. Each invocation reads the latest `tasks.json` and modifies it based on your instructions.
 
-### ドライラン → 実行ワークフロー
+### Dry Run → Execute Workflow
 
-`--dry-run` を使うと、Phase 0（タスク生成）と Phase A（プラン策定）まで実行して停止する。各タスクの実装プランを確認してから実行に進める：
+Use `--dry-run` to run Phase 0 (task generation) and Phase A (plan design) only, then review plans before executing:
 
 ```bash
-# 1. タスク生成 + プラン策定まで実行
+# 1. Generate tasks + plans
 convergent \
-  --context "src/" --goal "認証機能を実装する" --dry-run
+  --context "src/" --goal "Implement authentication" --dry-run
 
-# 2. プランを確認（各タスクの synthesis.json を参照）
+# 2. Review plans
 cat .convergent/latest/logs/task-001/synthesis.json | jq .
 
-# 3. 納得したら実装を実行
+# 3. Execute
 convergent --resume
 ```
 
-## 設定
+## Configuration
 
-プロジェクトルートに `convergent.config.json` を配置してカスタマイズ：
+Place a `convergent.config.json` in your project root to customize:
 
 ```json
 {
@@ -239,9 +238,9 @@ convergent --resume
 }
 ```
 
-### 検証コマンド
+### Verification Commands
 
-`verification.commands` にプロジェクトの品質チェックを設定する。オーケストレーターは各タスク実装後にこれらを実行する：
+Set your project's quality checks in `verification.commands`. The orchestrator runs these after each task implementation:
 
 ```json
 {
@@ -252,23 +251,23 @@ convergent --resume
 }
 ```
 
-コマンドが失敗した場合、エラー出力をコンテキストにして Phase B をリトライする。`max_retries` 回失敗すると、タスクは失敗としてマークされ変更はリバートされる。
+On failure, error output is fed back as context for a Phase B retry. After `max_retries` failures, the task is marked as failed and changes are reverted.
 
-`verification.commands` が空（`[]`）の場合、検証はスキップされる。
+Set `verification.commands` to `[]` to skip verification.
 
-## 出力
+## Output
 
-実行時データはすべて `.convergent/` に保存される（`.gitignore` に追加済み）。各実行はタイムスタンプ付きディレクトリに格納され、過去のランを振り返ることができる：
+All runtime data is stored in `.convergent/` (already in `.gitignore`). Each run gets a timestamped directory so you can review past runs:
 
 ```
 .convergent/
-├── latest -> runs/2026-02-12T20-30-00  # 最新ランへのシンボリックリンク
+├── latest -> runs/2026-02-12T20-30-00  # symlink to latest run
 └── runs/
-    ├── 2026-02-12T20-30-00/            # 1回目の実行
+    ├── 2026-02-12T20-30-00/            # first run
     │   ├── tasks.json
     │   ├── state.json
     │   ├── budget.json
-    │   ├── learnings.json               # タスク間学習データ
+    │   ├── learnings.json               # cross-task learning data
     │   ├── reports/
     │   │   ├── summary.md
     │   │   └── task-001.md
@@ -276,148 +275,152 @@ convergent --resume
     │       ├── orchestrator.log
     │       ├── phase0/
     │       │   ├── raw_output.json
-    │       │   └── project_summary.md   # プロジェクト構造サマリー
+    │       │   └── project_summary.md   # project structure summary
     │       └── task-001/
     │           ├── persona-conservative.json
     │           ├── persona-tdd.json
     │           ├── persona-security.json
-    │           ├── synthesis.json              # 収斂プラン
+    │           ├── synthesis.json        # converged plan
     │           ├── execution.log
     │           ├── verify.log
-    │           ├── review-correctness.json     # 正確性レビュー結果
-    │           ├── review-security.json        # セキュリティレビュー結果
-    │           ├── review-maintainability.json  # 保守性レビュー結果
-    │           └── review.json                 # マージされた最終レビュー結果
-    └── 2026-02-12T21-45-00/            # 2回目の実行
+    │           ├── review-correctness.json
+    │           ├── review-security.json
+    │           ├── review-maintainability.json
+    │           └── review.json           # merged final review
+    └── 2026-02-12T21-45-00/            # second run
         └── ...
 ```
 
-`--resume` は `latest` シンボリックリンクを辿って最新のランを再開する。
+`--resume` follows the `latest` symlink to pick up the most recent run.
 
-## インテリジェント機能
+## Intelligent Features
 
-### 自然言語による指示
+### Natural Language Instructions
 
-`--goal` がプロジェクト全体の方向性を示すのに対し、`--instructions` / `--instructions-file` で具体的な実装指示を追加できる。コードベースの自動分析と人間の意図を組み合わせたタスク生成が可能：
+While `--goal` sets the overall direction, `--instructions` / `--instructions-file` add specific implementation directives. Combine automated codebase analysis with human intent for targeted task generation:
 
-- **インライン指示**: `--instructions "認証をJWTからセッションに変更して"`
-- **ファイル指示**: `--instructions-file ./TODO.md` — 既存の TODO リストやイシューをそのまま入力
-- `--instructions` だけで実行可能 — `--goal` は指示の先頭行から自動生成、`--context` はカレントディレクトリ（`.`）にフォールバック
-- 指示は Phase 0 のプロンプトに `## User Instructions` セクションとして組み込まれ、タスク生成時に優先される
+- **Inline**: `--instructions "Switch auth from JWT to session-based"`
+- **From file**: `--instructions-file ./TODO.md` — feed existing TODO lists or issues directly
+- `--instructions` alone is sufficient — `--goal` auto-derives from the first line, `--context` defaults to `.`
+- Instructions are injected as a `## User Instructions` section in the Phase 0 prompt, giving them priority during task generation
 
-### コンテキスト品質向上
+### Context Quality
 
-- **import 依存グラフトレース**: タスクの `context_files` から import/require を辿り、関連ファイルを自動で発見。Phase A と Phase B のプロンプトに含める
-- **プロジェクト構造サマリー**: Phase 0 でソースファイルの一覧と各ファイルの一行説明を自動生成。Phase A のペルソナにプロジェクトの鳥瞰図を提供
-- **ペルソナの Read ツールアクセス**: Phase A のペルソナは Read, Glob, Grep ツールを使ってコードベースを探索可能。提供されたコンテキスト以外のファイルも確認できる
-- **シグネチャ抽出**: ディレクトリ内のソースファイルは先頭100行ではなく、export/type/interface/function のシグネチャを抽出してコンテキストに含める。ファイル全体の公開APIを俯瞰可能
+- **Import dependency tracing**: Traces import/require from task `context_files` to discover related files automatically, included in Phase A and Phase B prompts
+- **Project structure summary**: Phase 0 auto-generates a listing of source files with one-line descriptions, giving Phase A personas a bird's-eye view
+- **Persona Read tool access**: Phase A personas can use Read, Glob, and Grep tools to explore the codebase beyond the provided context
+- **Signature extraction**: Source files in directories have their export/type/interface/function signatures extracted (instead of just the first 100 lines), providing an overview of each file's public API
 
-### タスク間学習
+### Cross-Task Learning
 
-- **レビューフィードバック伝播**: あるタスクの Phase C レビューで指摘された問題を蓄積し、以降のタスクの Phase B プロンプトに「過去の教訓」として含める
-- **失敗パターン蓄積**: Phase A/B/検証/レビューの失敗パターンを記録し、同じ間違いの繰り返しを防止
-- **重複排除**: 類似した学習エントリは自動で排除し、プロンプトの無駄な膨張を防止
+- **Review feedback propagation**: Issues raised during Phase C reviews are accumulated and included as "lessons learned" in subsequent Phase B prompts
+- **Failure pattern accumulation**: Failure patterns from Phase A/B/verification/review are recorded to prevent repeating the same mistakes
+- **Deduplication**: Similar learning entries are automatically deduplicated to prevent prompt bloat
 
-### 実行効率
+### Execution Efficiency
 
-- **Phase A 早期終了**: 十分な数のペルソナが完了しファイルレベルの合意度が70%以上に達した場合、残りのペルソナをスキップして合成に進む
-- **Phase A 並列プリフェッチ**: 依存関係のないタスクの Phase A（プラン策定）を並列実行。Phase A は Read-only のため安全に並列化可能（デフォルト最大3並列）
-- **検証コマンド並列実行**: lint, typecheck, test を並列実行して検証時間を短縮
-- **差分レビュー**: Phase C リトライ時、前回のレビュー指摘事項と修正後の差分にフォーカスした効率的な再レビューを実行
+- **Phase A early termination**: When enough personas have completed and file-level consensus reaches 70%+, remaining personas are skipped and synthesis proceeds
+- **Phase A parallel prefetch**: Phase A (plan design) runs in parallel for tasks with no dependencies, since Phase A is read-only and safe to parallelize (default: up to 3 concurrent)
+- **Parallel verification**: lint, typecheck, and test run in parallel to reduce verification time
+- **Differential review**: On Phase C retry, review focuses on the diff between the previous review feedback and the current changes
 
-## 耐障害性
+## Fault Tolerance
 
-### Phase A リトライ＋フォールバック
+### Phase A Retry + Fallback
 
-ペルソナが構造化出力を返せなかった場合の段階的リカバリ：
+Graduated recovery when personas fail to produce structured output:
 
-1. **自動リトライ**: 失敗したペルソナを1回再試行（必要最低数に達するまで）
-2. **単一プラン採用**: 1つだけ成功した場合、シンセシスをスキップしてそのプランを直接使用
-3. **ダイレクトプラン**: 全ペルソナ失敗時、ペルソナなしで直接プランを生成
+1. **Auto-retry**: Failed personas are retried once (until minimum count is met)
+2. **Single-plan adoption**: If only one persona succeeds, synthesis is skipped and that plan is used directly
+3. **Direct plan**: If all personas fail, a plan is generated without personas
 
-### レビュー重大度フィルタ
+### Review Severity Filter
 
-Phase C レビューで `changes_requested` が返されても、指摘がすべて `info` レベル（警告・エラーなし）の場合は `approved` として扱う。`.gitkeep` の欠落など些細な指摘でのリトライループを防止。
+When Phase C review returns `changes_requested` but all issues are `info`-level (no warnings or errors), it's treated as `approved`. Prevents retry loops over trivial issues like missing `.gitkeep` files.
 
-### 差分なし検知
+### No-Diff Detection
 
-レビュー修正を試みた後、git diff が変化していなければ修正エージェントが効果的な変更を加えられなかったと判断し、タスクを承認して次に進む。無限リトライループを防止。
+After a review fix attempt, if `git diff` shows no changes, the fix agent was unable to make effective changes — the task is approved and execution moves on. Prevents infinite retry loops.
 
-### スマートサーキットブレーカー
+### Smart Circuit Breaker
 
-Phase A の構造化出力失敗（ペルソナの出力形式の問題）はソフト失敗として扱い、サーキットブレーカーのカウントに含めない。実装やレビューの本質的な失敗のみがカウントされ、3回連続で停止する。
+Phase A structured output failures (persona output format issues) are treated as soft failures and don't count toward the circuit breaker. Only substantive failures in implementation and review are counted, with a threshold of 3 consecutive failures.
 
-### API 呼び出しの指数バックオフリトライ
+### Exponential Backoff Retry
 
-Claude CLI 呼び出しでレート制限、接続エラー、サーバーエラー（429/502/503/529）が発生した場合、指数バックオフ（3秒→6秒→12秒）で最大2回リトライする。一時的な障害での無駄な失敗を防止。
+When Claude CLI calls hit rate limits, connection errors, or server errors (429/502/503/529), requests are retried with exponential backoff (3s → 6s → 12s, up to 2 retries). Prevents unnecessary failures from transient issues.
 
-### 検証コマンドのタイムアウト
+### Verification Timeout
 
-検証コマンド（lint, typecheck, test）にタイムアウトを設定可能（デフォルト: 5分）。テストの無限ループでオーケストレーター全体がハングすることを防止。`verification.timeout_seconds` で設定。
+Verification commands (lint, typecheck, test) have a configurable timeout (default: 5 minutes). Prevents the orchestrator from hanging due to infinite loops in tests. Set via `verification.timeout_seconds`.
 
-### `--retry-failed` による再試行
+### `--retry-failed`
 
-`--resume --retry-failed` で失敗・ブロックされたタスクを pending にリセットして再実行できる。依存先の失敗でブロックされたタスクも連鎖的にリセットされる。
+`--resume --retry-failed` resets failed and blocked tasks to pending and re-executes them. Tasks blocked by upstream failures are cascadingly reset.
 
-## 安全機能
+## Safety
 
-- **予算制限**: ペルソナ単位、タスク単位、合計の予算上限
-- **サーキットブレーカー**: 3回連続タスク失敗で停止（Phase A 構造化出力失敗はカウント外）
-- **検証ゲート**: lint + typecheck + test がパスしないとコミットしない
-- **マルチペルソナレビューゲート**: 検証通過後、3つの専門レビュアーが並列に正確性・セキュリティ・保守性を審査（1人でも reject → 修正必要）
-- **自動リバート**: 失敗タスクの変更を自動で巻き戻し
-- **再開可能**: Ctrl+C で状態保存、`--resume` で中断箇所から再開
+- **Budget limits**: Per-persona, per-task, and total budget caps
+- **Circuit breaker**: Stops after 3 consecutive task failures (Phase A output failures excluded)
+- **Verification gate**: Changes aren't committed unless lint + typecheck + test pass
+- **Multi-persona review gate**: After verification, 3 specialist reviewers audit correctness, security, and maintainability in parallel (any rejection triggers a fix)
+- **Auto-revert**: Failed task changes are automatically rolled back
+- **Resumable**: State is saved on Ctrl+C, resume with `--resume`
 
-## 設計方針: インタラクティブ介入をしない理由
+## Design Philosophy: No Interactive Intervention
 
-このツールは実行中の Claude とのやりとりに人間が介入する機能を**意図的に提供していない**。
+This tool **intentionally does not support** human intervention during execution.
 
-理由はシンプルで、このツールの存在意義が「人間というボトルネックを排除して自律的に開発を回す」ことにあるため。途中で逐一介入するなら、素の Claude Code を手で使うのと変わらない。
+The rationale is simple: the tool exists to eliminate the human bottleneck and run development autonomously. If you're intervening at every step, you might as well use Claude Code directly.
 
-代わりに、以下の手段で**観測と制御**を提供している：
+Instead, it provides **observation and control** through these mechanisms:
 
-| 手段 | 人間の関与 |
-|------|-----------|
-| `.convergent/logs/` 配下の詳細ログ | 事後確認（各呼び出しのプロンプト・レスポンス全文） |
-| ターミナル出力 | リアルタイム観測（進捗・コスト・成否） |
-| Ctrl+C → `--resume` | 緊急停止と再開 |
-| `--review` フラグ | Phase 0 後に一時停止してタスクキューを確認 |
-| `--dry-run` フラグ | Phase A（プラン策定）まで実行して停止。実装前にプラン確認 |
-| `--refine` フラグ | タスクキューを自然言語で修正（繰り返し可能） |
-| 予算制限・サーキットブレーカー | 暴走防止の自動停止 |
+| Mechanism | What It Provides |
+|-----------|-----------------|
+| `.convergent/logs/` | Post-hoc inspection (full prompt/response for every call) |
+| Terminal output | Real-time observation (progress, cost, pass/fail) |
+| Ctrl+C → `--resume` | Emergency stop and resume |
+| `--review` flag | Pause after Phase 0 to inspect task queue |
+| `--dry-run` flag | Run through Phase A (planning) only, review before implementing |
+| `--refine` flag | Modify task queue with natural language (repeatable) |
+| Budget limits + circuit breaker | Automatic runaway prevention |
 
-「何が起きているか分からない不安」はログとターミナル出力で解消し、「止めたい」は Ctrl+C で対応する。実行中に方針を変えたくなったら、止めてからゴールを修正して再実行する方が、中途半端な介入よりも結果が良い。
+"Not knowing what's happening" is addressed by logs and terminal output. "I want to stop" is handled by Ctrl+C. If you want to change direction mid-run, stop and re-run with an updated goal — this produces better results than mid-stream intervention.
 
-## ペルソナ
+## Personas
 
-| ペルソナ | 重視する観点 |
-|---------|-------------|
-| conservative | 安定性、実績あるパターン、エラーハンドリング |
-| minimalist | 最小限のコード、不要な抽象化の排除 |
-| tdd | テストファースト設計、エッジケースのカバー |
-| performance | アルゴリズム効率、バンドルサイズ、レンダリング |
-| ux | ローディング状態、エラーメッセージ、アクセシビリティ |
-| security | 入力検証、認証境界、XSS/CSRF |
-| pragmatist | 動くソフトウェアを出す、実用的なトレードオフ |
+| Persona | Focus |
+|---------|-------|
+| conservative | Stability, proven patterns, error handling |
+| minimalist | Minimal code, eliminating unnecessary abstractions |
+| tdd | Test-first design, edge case coverage |
+| performance | Algorithm efficiency, bundle size, rendering |
+| ux | Loading states, error messages, accessibility |
+| security | Input validation, auth boundaries, XSS/CSRF |
+| pragmatist | Ship working software, practical trade-offs |
 
-ペルソナは `lib/personas.json` を編集してカスタマイズ可能。
+Customize personas by editing `lib/personas.json`.
 
-## レビューペルソナ
+## Review Personas
 
-Phase C のコードレビューでは、以下の専門レビュアーが並列にレビューを行う：
+Phase C code review uses these specialist reviewers in parallel:
 
-| レビューペルソナ | 重視する観点 |
-|----------------|-------------|
-| correctness | プラン準拠、受入基準充足、ロジックの正確性 |
-| security | 入力検証、認証境界、XSS/SQLi、シークレット漏洩 |
-| maintainability | 不要な変更、パターン整合性、デッドコード、エラーハンドリング |
+| Review Persona | Focus |
+|---------------|-------|
+| correctness | Plan compliance, acceptance criteria, logic accuracy |
+| security | Input validation, auth boundaries, XSS/SQLi, secret leaks |
+| maintainability | Unnecessary changes, pattern consistency, dead code, error handling |
 
-統合ルール：**ストリクト union** — 1人でも `changes_requested` を返せば全体が `changes_requested` になり、全ペルソナの指摘事項がマージされて Phase B リトライにフィードバックされる。
+Merge rule: **strict union** — if any reviewer returns `changes_requested`, the whole review is `changes_requested`. All issues are merged and fed back to Phase B retry.
 
-レビューペルソナは `lib/review_personas.json` を編集してカスタマイズ可能。`config.review.personas` を空配列にすると従来の単一レビュアーモードにフォールバックする。
+Customize review personas by editing `lib/review_personas.json`. Set `config.review.personas` to an empty array to fall back to single-reviewer mode.
 
-## 必要要件
+## Requirements
 
-- [Bun](https://bun.sh/) ランタイム
-- [Claude Code](https://claude.ai/code) CLI（`claude` コマンド）
-- Git（自動コミット用）
+- [Bun](https://bun.sh/) runtime (>=1.0.0)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI (`claude` command)
+- Git (for auto-commit)
+
+## License
+
+[MIT](LICENSE)

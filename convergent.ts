@@ -66,22 +66,22 @@ EXAMPLES:
 
   # Instructions only (goal and context auto-derived)
   convergent \\
-    --instructions "認証をJWTからセッションベースに変更して。ユーザーモデルにroleフィールドを追加して"
+    --instructions "Switch auth from JWT to session-based. Add a role field to the user model"
 
   # Read instructions from a file
   convergent --instructions-file ./TODO.md
 
   # With goal + instructions for more control
   convergent \\
-    --context "src/" --goal "ECサイトのバックエンド" \\
-    --instructions "認証をJWTからセッションベースに変更して"
+    --context "src/" --goal "Improve e-commerce backend" \\
+    --instructions "Switch auth from JWT to session-based"
 
   convergent --context "src/" --goal "Fix type errors" --review
 
   convergent --resume
 
   # Refine task queue after --review
-  convergent --refine "task-001は不要、削除して。task-003の複雑度をstandardに変更"`);
+  convergent --refine "Remove task-001, it's unnecessary. Change task-003 complexity to standard"`);
 }
 
 function parseArgs(argv: string[]): CliArgs {
