@@ -266,6 +266,44 @@ code {
 .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
 .copy-btn.copied { border-color: var(--success); color: var(--success); }
 
+/* --- Section Convergence Decorations --- */
+.pipeline,
+.features { position: relative; overflow: hidden; }
+
+.pipeline::before {
+  content: '';
+  position: absolute;
+  right: -2%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 320px;
+  height: 320px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg stroke='%23d4924a' stroke-width='1.5' fill='none' stroke-linecap='round'%3E%3Cline x1='25' y1='15' x2='100' y2='100'/%3E%3Cline x1='175' y1='15' x2='100' y2='100'/%3E%3Cline x1='100' y1='185' x2='100' y2='100'/%3E%3C/g%3E%3Ccircle cx='100' cy='100' r='4' fill='%23d4924a'/%3E%3C/svg%3E") no-repeat center / contain;
+  opacity: 0.05;
+  pointer-events: none;
+  animation: molecule-pulse 8s ease-in-out infinite;
+}
+
+.features::after {
+  content: '';
+  position: absolute;
+  left: -3%;
+  top: 50%;
+  transform: translateY(-50%) rotate(120deg);
+  width: 280px;
+  height: 280px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cg stroke='%23d4924a' stroke-width='1' fill='none' stroke-linecap='round'%3E%3Cline x1='15' y1='40' x2='100' y2='100'/%3E%3Cline x1='60' y1='10' x2='100' y2='100'/%3E%3Cline x1='170' y1='25' x2='100' y2='100'/%3E%3Cline x1='185' y1='130' x2='100' y2='100'/%3E%3Cline x1='40' y1='180' x2='100' y2='100'/%3E%3C/g%3E%3Ccircle cx='100' cy='100' r='3' fill='%23d4924a'/%3E%3Cg fill='%23d4924a' opacity='0.5'%3E%3Ccircle cx='15' cy='40' r='2'/%3E%3Ccircle cx='60' cy='10' r='2'/%3E%3Ccircle cx='170' cy='25' r='2'/%3E%3Ccircle cx='185' cy='130' r='2'/%3E%3Ccircle cx='40' cy='180' r='2'/%3E%3C/g%3E%3C/svg%3E") no-repeat center / contain;
+  opacity: 0.04;
+  pointer-events: none;
+  animation: molecule-pulse 8s ease-in-out infinite;
+  animation-delay: 4s;
+}
+
+@media (max-width: 767px) {
+  .pipeline::before,
+  .features::after { display: none; }
+}
+
 /* ========================================
    Concept Section
    ======================================== */
@@ -674,4 +712,6 @@ code {
   }
   .fade-in { opacity: 1; transform: none; }
   .hero-molecule { animation: none; opacity: 0.06; }
+  .pipeline::before,
+  .features::after { animation: none; }
 }
