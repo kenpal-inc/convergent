@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Stylized hexagon + pentagon (caffeine ring system) in amber -->
+  <g fill="none" stroke="#d4924a" stroke-width="2" stroke-linejoin="round">
+    <!-- Hexagon (pyrimidine) -->
+    <polygon points="16,4 26,10 26,22 16,28 6,22 6,10"/>
+    <!-- Pentagon (imidazole) fused on right side -->
+    <polygon points="26,10 32,16 29,25 26,22"/>
+  </g>
+  <!-- Center dot -->
+  <circle cx="16" cy="16" r="2" fill="#d4924a"/>
+</svg>
