@@ -52,6 +52,28 @@
     });
   });
 
+  // --- Theme toggle ---
+  var toggle = document.querySelector('.theme-toggle');
+  if (toggle) {
+    var update = function () {
+      var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+      toggle.textContent = isLight ? '\u263D' : '\u2600';
+      toggle.setAttribute('aria-label', isLight ? 'Switch to dark mode' : 'Switch to light mode');
+    };
+    toggle.addEventListener('click', function () {
+      var isLight = document.documentElement.getAttribute('data-theme') === 'light';
+      var next = isLight ? 'dark' : 'light';
+      if (next === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+      localStorage.setItem('theme', next);
+      update();
+    });
+    update();
+  }
+
   // --- Smooth scroll for anchor links ---
   document.querySelectorAll('a[href^="#"]').forEach((link) => {
     link.addEventListener('click', (e) => {

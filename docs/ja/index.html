@@ -22,6 +22,9 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="../style.css">
+  <script>
+    (function(){var t=localStorage.getItem('theme');if(!t)t=window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark';if(t==='light')document.documentElement.setAttribute('data-theme','light')})();
+  </script>
   <style>
     body, h3, .section-subtitle, .persona-card p, .feature-item p,
     .phase-card p, .pipeline-summary, .persona-note, .output-note,
@@ -32,7 +35,7 @@
   </style>
 </head>
 <body>
-  <div class="lang-switch"><a href="../">English</a></div>
+  <div class="lang-switch"><button class="theme-toggle" aria-label="Toggle theme">&#9728;</button><a href="../">English</a></div>
   <main>
 
     <!-- ================================ Hero ================================ -->
