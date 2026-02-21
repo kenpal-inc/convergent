@@ -308,25 +308,19 @@ code {
 
 .concept-molecule {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 24px;
+  justify-content: center;
+  padding: 16px 24px;
   background: var(--bg-primary);
   border-radius: 8px;
   border: 1px solid var(--accent);
 }
 
-.concept-molecule svg {
-  width: 120px;
-  height: auto;
-  color: var(--accent);
-}
-
 .concept-molecule-label {
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 16px;
   color: var(--accent);
+  letter-spacing: 0.02em;
 }
 
 /* ========================================
