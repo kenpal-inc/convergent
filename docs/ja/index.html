@@ -1,40 +1,48 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>convergent — Autonomous Development Orchestrator for Claude Code</title>
-  <meta name="description" content="Multiple AI personas independently design solutions, then converge on the optimal one. Autonomous development orchestrator for Claude Code.">
+  <title>convergent — Claude Code 向け自律開発オーケストレーター</title>
+  <meta name="description" content="複数のAIペルソナが独立して解決策を設計し、最適な実装に収斂する。Claude Code 向け自律開発オーケストレーター。">
 
   <!-- Open Graph -->
-  <meta property="og:title" content="convergent — Autonomous Development Orchestrator">
-  <meta property="og:description" content="Multiple AI personas independently design solutions, then converge on the optimal one. For Claude Code.">
-  <meta property="og:url" content="https://kenpal-inc.github.io/convergent/">
+  <meta property="og:title" content="convergent — 自律開発オーケストレーター">
+  <meta property="og:description" content="複数のAIペルソナが独立して解決策を設計し、最適な実装に収斂する。Claude Code 向け。">
+  <meta property="og:url" content="https://kenpal-inc.github.io/convergent/ja/">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
 
   <!-- Favicon -->
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    body, h3, .section-subtitle, .persona-card p, .feature-item p,
+    .phase-card p, .pipeline-summary, .persona-note, .output-note,
+    .hero-desc, .hero-tagline, .footer-meta, .footer-links a, .plant-name,
+    .btn, .copy-btn, .code-lang {
+      font-family: 'Noto Sans JP', var(--font-body);
+    }
+  </style>
 </head>
 <body>
-  <div class="lang-switch"><a href="ja/">日本語</a></div>
+  <div class="lang-switch"><a href="../">English</a></div>
   <main>
 
     <!-- ================================ Hero ================================ -->
     <section class="hero" id="hero">
-      <img src="caffeine.svg" alt="" class="hero-molecule" aria-hidden="true">
+      <img src="../caffeine.svg" alt="" class="hero-molecule" aria-hidden="true">
       <div class="container">
         <div class="hero-content">
           <h1 class="hero-wordmark">convergent</h1>
-          <p class="hero-tagline">Autonomous development orchestrator for Claude Code</p>
-          <p class="hero-desc">Multiple AI personas independently design solutions, then converge on the optimal implementation — just like caffeine evolved independently across six unrelated plant species.</p>
+          <p class="hero-tagline">Claude Code 向け自律開発オーケストレーター</p>
+          <p class="hero-desc">複数のAIペルソナが独立して解決策を設計し、最適な実装に収斂する — カフェインが6つの無関係な植物種で独立に進化したように。</p>
 
           <div class="hero-install">
             <code>curl -fsSL https://raw.githubusercontent.com/kenpal-inc/convergent/main/install.sh | bash</code>
@@ -42,7 +50,7 @@
           </div>
 
           <div class="hero-buttons">
-            <a href="#quickstart" class="btn btn-primary">Get Started</a>
+            <a href="#quickstart" class="btn btn-primary">はじめる</a>
             <a href="https://github.com/kenpal-inc/convergent" class="btn btn-secondary" target="_blank" rel="noopener">
               GitHub
             </a>
@@ -54,46 +62,46 @@
     <!-- ================================ Concept ================================ -->
     <section class="concept" id="concept">
       <div class="container">
-        <h2 class="fade-in">What Is Convergent Evolution?</h2>
-        <p class="section-subtitle fade-in">When unrelated species independently arrive at the same solution, that solution is likely optimal.</p>
+        <h2 class="fade-in">収斂進化とは？</h2>
+        <p class="section-subtitle fade-in">無関係な種が独立して同じ解に辿り着くとき、その解はおそらく最適である。</p>
 
         <div class="concept-content" style="margin-top: 40px;">
           <div class="fade-in">
             <div class="concept-plants">
               <div class="plant-item">
                 <span class="plant-icon">&#9749;</span>
-                <span class="plant-name">Coffee</span>
+                <span class="plant-name">コーヒー</span>
               </div>
               <div class="plant-item">
                 <span class="plant-icon">&#127809;</span>
-                <span class="plant-name">Tea</span>
+                <span class="plant-name">茶</span>
               </div>
               <div class="plant-item">
                 <span class="plant-icon">&#127851;</span>
-                <span class="plant-name">Cacao</span>
+                <span class="plant-name">カカオ</span>
               </div>
               <div class="plant-item">
                 <span class="plant-icon">&#127807;</span>
-                <span class="plant-name">Guarana</span>
+                <span class="plant-name">ガラナ</span>
               </div>
               <div class="plant-item">
                 <span class="plant-icon">&#127811;</span>
-                <span class="plant-name">Yerba Mate</span>
+                <span class="plant-name">マテ</span>
               </div>
               <div class="plant-item">
                 <span class="plant-icon">&#127812;</span>
-                <span class="plant-name">Kola Nut</span>
+                <span class="plant-name">コーラナッツ</span>
               </div>
             </div>
             <div class="concept-arrow">&#8595;</div>
             <div class="concept-molecule">
-              <span class="concept-molecule-label">C&#8328;H&#8321;&#8320;N&#8324;O&#8322; &mdash; Caffeine</span>
+              <span class="concept-molecule-label">C&#8328;H&#8321;&#8320;N&#8324;O&#8322; &mdash; カフェイン</span>
             </div>
           </div>
 
           <div class="fade-in">
-            <p>Six unrelated plant species independently evolved the same molecule. When different paths converge on the same answer, <strong style="color: var(--text-primary);">that answer is likely optimal.</strong></p>
-            <p><strong style="color: var(--accent);">convergent</strong> applies this to code: multiple AI personas with different priorities analyze the same problem, then a synthesizer merges what they agree on.</p>
+            <p>6つの無関係な植物種が、独立して同じ分子を進化させた。異なる道が同じ答えに収斂するとき、<strong style="color: var(--text-primary);">その答えはおそらく最適解である。</strong></p>
+            <p><strong style="color: var(--accent);">convergent</strong> はこの原理をコードに応用する。異なる優先度を持つ複数のAIペルソナが同じ問題を分析し、合意した要素をシンセサイザーが統合する。</p>
           </div>
         </div>
       </div>
@@ -102,134 +110,134 @@
     <!-- ================================ Pipeline ================================ -->
     <section class="pipeline" id="how-it-works">
       <div class="container">
-        <h2 class="fade-in">How It Works</h2>
-        <p class="section-subtitle fade-in">Give it a codebase and a goal. It handles the rest.</p>
+        <h2 class="fade-in">仕組み</h2>
+        <p class="section-subtitle fade-in">コードベースとゴールを渡すだけ。あとは全自動。</p>
 
         <div class="pipeline-flow">
           <div class="phase-card fade-in">
             <div class="phase-label">Phase 0</div>
             <div class="phase-icon">&#128466;</div>
-            <h3>Task Generation</h3>
-            <p>Analyzes your codebase and goal, decomposes into a structured task queue with dependency graph. Assigns types: code, explore, or command.</p>
+            <h3>タスク生成</h3>
+            <p>コードベースとゴールを分析し、依存関係グラフ付きのタスクキューを生成。タスク種別: code, explore, command。</p>
           </div>
           <div class="phase-card fade-in">
             <div class="phase-label">Phase A</div>
             <div class="phase-icon">&#129528;</div>
-            <h3>Convergent Evolution</h3>
-            <p>3&ndash;7 personas plan in parallel with different priorities. Early termination on high consensus. Synthesizer merges the optimal plan.</p>
+            <h3>収斂進化</h3>
+            <p>3〜7のペルソナが異なる優先度で並列に設計。高い合意で早期終了。シンセサイザーが最適プランに統合。</p>
           </div>
           <div class="phase-card fade-in">
             <div class="phase-label">Phase B</div>
             <div class="phase-icon">&#9000;</div>
-            <h3>Implementation</h3>
-            <p>Executes the converged plan with cross-task learnings as context. Runs verification (lint, typecheck, test) and retries on failure.</p>
+            <h3>実装</h3>
+            <p>収斂したプランを実行。タスク間の学習をコンテキストとして活用。検証（lint, 型チェック, テスト）を実行し、失敗時はリトライ。</p>
           </div>
           <div class="phase-card fade-in">
             <div class="phase-label">Phase C</div>
             <div class="phase-icon">&#128270;</div>
-            <h3>Code Review</h3>
-            <p>3 specialist reviewers audit in parallel: correctness, security, and maintainability. All must approve before commit.</p>
+            <h3>コードレビュー</h3>
+            <p>3人の専門レビュアーが並列に監査: 正確性、セキュリティ、保守性。全員が承認するまでコミットされない。</p>
           </div>
         </div>
 
-        <p class="pipeline-summary fade-in">Loops until all tasks complete or budget is exhausted.</p>
+        <p class="pipeline-summary fade-in">全タスク完了または予算消化まで繰り返す。</p>
       </div>
     </section>
 
     <!-- ================================ Personas ================================ -->
     <section class="personas" id="personas">
       <div class="container">
-        <h2 class="fade-in">7 Perspectives, 1 Optimal Plan</h2>
-        <p class="section-subtitle fade-in">Each persona brings a different priority. What they converge on is the best approach.</p>
+        <h2 class="fade-in">7つの視点、1つの最適解</h2>
+        <p class="section-subtitle fade-in">各ペルソナが異なる優先度を持つ。収斂した部分が最良のアプローチ。</p>
 
         <div class="persona-grid">
           <div class="persona-card fade-in" style="--i: 0">
             <div class="persona-icon">&#128737;</div>
             <h3>conservative</h3>
-            <p>Stability, proven patterns, comprehensive error handling</p>
+            <p>安定性、実績あるパターン、包括的なエラーハンドリング</p>
           </div>
           <div class="persona-card fade-in" style="--i: 1">
             <div class="persona-icon">&#10134;</div>
             <h3>minimalist</h3>
-            <p>Least code possible, eliminate unnecessary abstractions</p>
+            <p>最小限のコード、不要な抽象化の排除</p>
           </div>
           <div class="persona-card fade-in" style="--i: 2">
             <div class="persona-icon">&#129514;</div>
             <h3>tdd</h3>
-            <p>Tests first, edge case coverage, test-driven design</p>
+            <p>テストファースト、エッジケースの網羅</p>
           </div>
           <div class="persona-card fade-in" style="--i: 3">
             <div class="persona-icon">&#9889;</div>
             <h3>performance</h3>
-            <p>Algorithm efficiency, bundle size, rendering speed</p>
+            <p>アルゴリズム効率、バンドルサイズ、描画速度</p>
           </div>
           <div class="persona-card fade-in" style="--i: 4">
             <div class="persona-icon">&#128100;</div>
             <h3>ux</h3>
-            <p>Loading states, error messages, accessibility</p>
+            <p>ローディング状態、エラーメッセージ、アクセシビリティ</p>
           </div>
           <div class="persona-card fade-in" style="--i: 5">
             <div class="persona-icon">&#128274;</div>
             <h3>security</h3>
-            <p>Input validation, auth boundaries, XSS/CSRF prevention</p>
+            <p>入力バリデーション、認証境界、XSS/CSRF防止</p>
           </div>
           <div class="persona-card fade-in" style="--i: 6">
             <div class="persona-icon">&#128295;</div>
             <h3>pragmatist</h3>
-            <p>Ship working software, practical trade-offs</p>
+            <p>動くソフトウェアを出荷する、実用的なトレードオフ</p>
           </div>
         </div>
 
-        <p class="persona-note fade-in">Trivial tasks skip personas entirely. Standard tasks use 3. Complex tasks use all 7.</p>
+        <p class="persona-note fade-in">簡単なタスクはペルソナなし。標準は3つ。複雑なタスクは全7つを使用。</p>
       </div>
     </section>
 
     <!-- ================================ Features ================================ -->
     <section class="features" id="features">
       <div class="container">
-        <h2 class="fade-in">Key Features</h2>
+        <h2 class="fade-in">主な機能</h2>
 
         <div class="features-grid">
           <div class="feature-item fade-in">
             <div class="feature-icon">&#128218;</div>
             <div>
-              <h3>Cross-Task Learning</h3>
-              <p>Review feedback and failure patterns propagate to subsequent tasks, preventing repeated mistakes.</p>
+              <h3>タスク間学習</h3>
+              <p>レビューのフィードバックと失敗パターンが後続タスクに伝播し、同じミスを防ぐ。</p>
             </div>
           </div>
           <div class="feature-item fade-in">
             <div class="feature-icon">&#128737;</div>
             <div>
-              <h3>Fault Tolerance</h3>
-              <p>Auto-retry with fallback plans, smart circuit breaker, exponential backoff for transient errors.</p>
+              <h3>耐障害性</h3>
+              <p>フォールバック付き自動リトライ、スマートサーキットブレーカー、指数バックオフ。</p>
             </div>
           </div>
           <div class="feature-item fade-in">
             <div class="feature-icon">&#128176;</div>
             <div>
-              <h3>Budget Control</h3>
-              <p>Per-persona, per-task, and total budget caps in USD. Automatic shutdown on exhaustion.</p>
+              <h3>予算管理</h3>
+              <p>ペルソナ単位・タスク単位・全体の予算上限（USD）。消化時に自動停止。</p>
             </div>
           </div>
           <div class="feature-item fade-in">
             <div class="feature-icon">&#9654;</div>
             <div>
-              <h3>Resumable</h3>
-              <p>Ctrl+C anytime. Resume with <code>--resume</code>. State is always persisted.</p>
+              <h3>レジューム</h3>
+              <p>いつでも Ctrl+C。<code>--resume</code> で再開。状態は常に保存される。</p>
             </div>
           </div>
           <div class="feature-item fade-in">
             <div class="feature-icon">&#128230;</div>
             <div>
-              <h3>Zero Dependencies</h3>
-              <p>No npm install needed. Just Bun runtime + Claude Code CLI. Nothing else.</p>
+              <h3>ゼロ依存</h3>
+              <p>npm install 不要。Bun ランタイム + Claude Code CLI だけ。</p>
             </div>
           </div>
           <div class="feature-item fade-in">
             <div class="feature-icon">&#128065;</div>
             <div>
-              <h3>Review Before Execute</h3>
-              <p><code>--review</code> to inspect task queue, <code>--dry-run</code> for plans only, <code>--refine</code> to adjust.</p>
+              <h3>実行前レビュー</h3>
+              <p><code>--review</code> でタスクキュー確認、<code>--dry-run</code> でプランのみ、<code>--refine</code> で調整。</p>
             </div>
           </div>
         </div>
@@ -239,14 +247,14 @@
     <!-- ================================ Quick Start ================================ -->
     <section class="quickstart" id="quickstart">
       <div class="container">
-        <h2 class="fade-in">Quick Start</h2>
+        <h2 class="fade-in">クイックスタート</h2>
 
         <div class="code-block fade-in">
           <div class="code-header">
             <span class="code-lang">bash</span>
             <button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/kenpal-inc/convergent/main/install.sh | bash">Copy</button>
           </div>
-          <pre><code><span class="syn-comment"># Install</span>
+          <pre><code><span class="syn-comment"># インストール</span>
 <span class="syn-cmd">curl</span> <span class="syn-flag">-fsSL</span> <span class="syn-string">https://raw.githubusercontent.com/kenpal-inc/convergent/main/install.sh</span> | <span class="syn-cmd">bash</span></code></pre>
         </div>
 
@@ -257,7 +265,7 @@
   --context "src/,docs/" \
   --goal "Implement user authentication with JWT tokens"'>Copy</button>
           </div>
-          <pre><code><span class="syn-comment"># Run on your project</span>
+          <pre><code><span class="syn-comment"># プロジェクトで実行</span>
 <span class="syn-cmd">convergent</span> \
   <span class="syn-flag">--context</span> <span class="syn-string">"src/,docs/"</span> \
   <span class="syn-flag">--goal</span> <span class="syn-string">"Implement user authentication with JWT tokens"</span></code></pre>
@@ -270,7 +278,7 @@
 convergent --refine "Remove task-001, add E2E tests to task-003"
 convergent --resume'>Copy</button>
           </div>
-          <pre><code><span class="syn-comment"># Review → Refine → Execute workflow</span>
+          <pre><code><span class="syn-comment"># レビュー → 修正 → 実行 ワークフロー</span>
 <span class="syn-cmd">convergent</span> <span class="syn-flag">--context</span> <span class="syn-string">"src/"</span> <span class="syn-flag">--goal</span> <span class="syn-string">"Fix type errors"</span> <span class="syn-flag">--review</span>
 <span class="syn-cmd">convergent</span> <span class="syn-flag">--refine</span> <span class="syn-string">"Remove task-001, add E2E tests to task-003"</span>
 <span class="syn-cmd">convergent</span> <span class="syn-flag">--resume</span></code></pre>
@@ -281,8 +289,8 @@ convergent --resume'>Copy</button>
     <!-- ================================ Output ================================ -->
     <section class="output" id="output">
       <div class="container">
-        <h2 class="fade-in">Full Transparency</h2>
-        <p class="section-subtitle fade-in">Every decision is logged. Every persona output is inspectable.</p>
+        <h2 class="fade-in">完全な透明性</h2>
+        <p class="section-subtitle fade-in">すべての判断がログに残る。すべてのペルソナ出力が検査可能。</p>
 
         <div class="output-tree fade-in">
           <pre>.convergent/
@@ -307,7 +315,7 @@ convergent --resume'>Copy</button>
                 &#9500;&#9472;&#9472; verify.log
                 &#9492;&#9472;&#9472; review.json</pre>
         </div>
-        <p class="output-note fade-in">Resume with <code>--resume</code>. Failed tasks auto-revert. Nothing is lost.</p>
+        <p class="output-note fade-in"><code>--resume</code> で再開。失敗タスクは自動ロールバック。何も失われない。</p>
       </div>
     </section>
 
@@ -324,9 +332,9 @@ convergent --resume'>Copy</button>
         <nav>
           <ul class="footer-links">
             <li><a href="https://github.com/kenpal-inc/convergent" target="_blank" rel="noopener">GitHub</a></li>
-            <li><a href="https://github.com/kenpal-inc/convergent/blob/main/README.md" target="_blank" rel="noopener">Docs</a></li>
-            <li><a href="https://github.com/kenpal-inc/convergent/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing</a></li>
-            <li><a href="https://github.com/kenpal-inc/convergent/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a></li>
+            <li><a href="https://github.com/kenpal-inc/convergent/blob/main/README.md" target="_blank" rel="noopener">ドキュメント</a></li>
+            <li><a href="https://github.com/kenpal-inc/convergent/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">コントリビュート</a></li>
+            <li><a href="https://github.com/kenpal-inc/convergent/blob/main/CHANGELOG.md" target="_blank" rel="noopener">変更履歴</a></li>
           </ul>
         </nav>
         <div class="footer-formula">C&#8328;H&#8321;&#8320;N&#8324;O&#8322;</div>
@@ -334,6 +342,6 @@ convergent --resume'>Copy</button>
     </div>
   </footer>
 
-  <script src="script.js"></script>
+  <script src="../script.js"></script>
 </body>
 </html>

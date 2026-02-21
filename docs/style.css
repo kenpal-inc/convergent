@@ -615,6 +615,32 @@ code {
 }
 
 /* ========================================
+   Language Switcher
+   ======================================== */
+.lang-switch {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+}
+
+.lang-switch a {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: color 0.2s, border-color 0.2s;
+}
+.lang-switch a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ========================================
    Scroll Animations
    ======================================== */
 .fade-in {
