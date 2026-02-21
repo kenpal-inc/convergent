@@ -45,9 +45,10 @@
   }
 }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 
 body {
+  overflow-x: hidden;
   font-family: var(--font-body);
   font-size: 16px;
   line-height: 1.7;
@@ -59,6 +60,7 @@ body {
 
 /* --- Container --- */
 .container {
+  width: 100%;
   max-width: var(--container-max);
   margin: 0 auto;
   padding: 0 var(--container-padding);
@@ -149,7 +151,7 @@ code {
   .hero-molecule { display: none; }
 }
 
-.hero-content { position: relative; z-index: 1; max-width: 640px; }
+.hero-content { position: relative; z-index: 1; max-width: 640px; min-width: 0; overflow: hidden; }
 
 .hero-wordmark {
   font-family: var(--font-display);
@@ -191,12 +193,19 @@ code {
   justify-content: space-between;
   gap: 12px;
   overflow-x: auto;
+  max-width: 100%;
 }
 
 .hero-install code {
   background: none;
   padding: 0;
   white-space: nowrap;
+}
+@media (max-width: 767px) {
+  .hero-install code {
+    white-space: normal;
+    word-break: break-all;
+  }
 }
 
 .hero-buttons {
@@ -485,6 +494,7 @@ code {
   border-radius: 8px;
   margin-top: 24px;
   overflow: hidden;
+  max-width: 100%;
 }
 
 .code-header {
@@ -536,6 +546,7 @@ code {
   padding: 24px;
   margin-top: 24px;
   overflow-x: auto;
+  max-width: 100%;
 }
 
 .output-tree pre {
