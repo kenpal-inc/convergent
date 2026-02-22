@@ -11,7 +11,9 @@ const INITIAL_BACKOFF_MS = 3_000;
 function isTransientError(response: ClaudeResponse): boolean {
   if (!response.is_error) return false;
   const msg = (response.result ?? "").toLowerCase();
-  return (
+
+  // API-level transient errors
+  if (
     msg.includes("rate limit") ||
     msg.includes("overloaded") ||
     msg.includes("429") ||
@@ -23,7 +25,14 @@ function isTransientError(response: ClaudeResponse): boolean {
     msg.includes("request timeout") ||
     msg.includes("econnreset") ||
     msg.includes("socket hang up")
-  );
+  ) return true;
+
+  // Timeout with $0 cost = API never responded (not a genuinely slow task)
+  if (response.total_cost_usd === 0 && msg.includes("exceeded") && msg.includes("limit")) {
+    return true;
+  }
+
+  return false;
 }
 
 export async function callClaude(
@@ -33,7 +42,10 @@ export async function callClaude(
     const response = await callClaudeOnce(options);
 
     if (attempt < MAX_RETRIES && isTransientError(response)) {
-      const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+      // Use longer backoff for timeout errors (API was completely unresponsive)
+      const isTimeout = (response.result ?? "").toLowerCase().includes("exceeded");
+      const baseMs = isTimeout ? 15_000 : INITIAL_BACKOFF_MS;
+      const backoffMs = baseMs * Math.pow(2, attempt);
       log.warn(`Transient error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.result?.slice(0, 120)}`);
       log.warn(`Retrying in ${(backoffMs / 1000).toFixed(0)}s...`);
       await Bun.sleep(backoffMs);
