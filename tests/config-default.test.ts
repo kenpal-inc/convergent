@@ -34,9 +34,9 @@ describe("config.default.json validation", () => {
     expect(typeof defaultConfig.git.create_pr).toBe("boolean");
   });
 
-  test("Verify budget.per_persona_max_usd remains at 1.00", () => {
+  test("Verify budget.per_persona_max_usd is 2.50 for tool-using personas", () => {
     expect(defaultConfig.budget).toBeDefined();
-    expect(defaultConfig.budget.per_persona_max_usd).toBe(1.0);
+    expect(defaultConfig.budget.per_persona_max_usd).toBe(2.5);
   });
 
   test("Validate default config matches the Config type schema", () => {
@@ -49,15 +49,15 @@ describe("config.default.json validation", () => {
 
     // Verify budget section
     expect(defaultConfig.budget).toBeDefined();
-    expect(defaultConfig.budget.total_max_usd).toBe(50.0);
+    expect(defaultConfig.budget.total_max_usd).toBe(75.0);
     expect(defaultConfig.budget.per_task_max_usd).toBe(10.0);
-    expect(defaultConfig.budget.per_persona_max_usd).toBe(1.0);
+    expect(defaultConfig.budget.per_persona_max_usd).toBe(2.5);
     expect(defaultConfig.budget.synthesis_max_usd).toBe(2.0);
     expect(defaultConfig.budget.execution_max_usd).toBe(5.0);
 
     // Verify parallelism section
     expect(defaultConfig.parallelism).toBeDefined();
-    expect(defaultConfig.parallelism.persona_timeout_seconds).toBe(120);
+    expect(defaultConfig.parallelism.persona_timeout_seconds).toBe(600);
 
     // Verify verification section
     expect(defaultConfig.verification).toBeDefined();

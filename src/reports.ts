@@ -268,6 +268,35 @@ export async function generateSummaryReport(
     }
     lines.push('');
 
+    // 6b. Convergence evolution metrics
+    const tasksWithMetrics = taskList
+      .map(t => {
+        const statusObj = taskStatuses[t.id];
+        const metrics = typeof statusObj === 'object' ? (statusObj as any).convergence_metrics : undefined;
+        return { id: t.id, metrics };
+      })
+      .filter(t => t.metrics);
+
+    if (tasksWithMetrics.length > 0) {
+      lines.push('## Convergence Evolution Metrics');
+      lines.push('');
+      lines.push('| Task | Personas | Succeeded | Consensus | Mode | Decisions | Divergences | Insights |');
+      lines.push('|------|----------|-----------|-----------|------|-----------|-------------|----------|');
+
+      for (const { id, metrics: m } of tasksWithMetrics) {
+        lines.push(`| ${id} | ${m.persona_count} | ${m.successful_count} | ${(m.file_consensus * 100).toFixed(0)}% | ${m.synthesis_mode} | ${m.convergent_decisions_count} | ${m.divergences_resolved_count} | ${m.unique_insights_count} |`);
+      }
+
+      const converged = tasksWithMetrics.filter(t => t.metrics.synthesis_mode === 'converged').length;
+      const fallback = tasksWithMetrics.filter(t => t.metrics.synthesis_mode === 'single_plan_fallback').length;
+      const direct = tasksWithMetrics.filter(t => t.metrics.synthesis_mode === 'direct_plan').length;
+      const avgConsensus = tasksWithMetrics.reduce((s, t) => s + t.metrics.file_consensus, 0) / tasksWithMetrics.length;
+
+      lines.push('');
+      lines.push(`**Summary**: ${converged} converged, ${fallback} single-plan fallback, ${direct} direct plan. Average file consensus: ${(avgConsensus * 100).toFixed(0)}%.`);
+      lines.push('');
+    }
+
     // 7. Git history (conditional)
     if (config.git?.auto_commit || config.git?.autoCommit) {
       lines.push('## Git Commit History');

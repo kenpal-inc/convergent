@@ -3,7 +3,8 @@ import { log } from "./logger";
 import { callClaude, getStructuredOutput } from "./claude";
 import { buildTaskContext } from "./context";
 import { recordCost } from "./budget";
-import type { Config, ConvergedPlan, PersonaMap, PlanOutput, Task } from "./types";
+import { recordConvergenceMetrics } from "./state";
+import type { Config, ConvergedPlan, ConvergenceMetrics, PersonaMap, PlanOutput, Task } from "./types";
 
 const SYNTHESIS_SYSTEM_PROMPT = `You are a senior technical lead performing plan synthesis through convergent evolution.
 
@@ -71,11 +72,16 @@ ${projectSummary ? `\n${projectSummary}\n` : ""}
 ## Full Task Queue (for context on how this task fits into the larger plan)
 ${tasksContext}
 
-## Relevant Source Files
+## Relevant Source Files (starting point — explore further as needed)
 ${fileContext}
 
 ## Instructions
-Produce a detailed implementation plan for this specific task. Include:
+You have tools to explore the codebase (Read, Glob, Grep). Use them to:
+1. Verify the relevant files and understand their current state
+2. Discover additional files, patterns, or conventions that inform your plan
+3. Check for existing implementations of similar features
+
+Then produce a detailed implementation plan for this specific task. Include:
 1. Files to create or modify (with exact paths relative to project root)
 2. For each file: the specific changes, new functions/types, and their signatures
 3. Any new dependencies needed
@@ -89,22 +95,36 @@ Be specific and concrete. Someone should be able to implement your plan without 
   log.info(`Launching ${personaIds.length} personas in parallel...`);
 
   const minRequired = personaIds.length <= 3 ? 2 : 3;
-  const earlyTerminationThreshold = Math.max(minRequired + 1, Math.ceil(personaIds.length * 0.6));
   const successfulPlans: { personaId: string; plan: PlanOutput }[] = [];
   let succeeded = 0;
   let failed = 0;
 
-  // Launch all personas and process results as they arrive (for early termination)
-  type PersonaResult = { personaId: string; response: import("./types").ClaudeResponse } | null;
+  // Stagger persona launches by 2s to avoid concurrent spawn contention.
+  //
+  // Phase A has task-level parallelism (Promise.all across batch) multiplied by
+  // persona-level parallelism (Promise.allSettled within each task). Without stagger,
+  // all processes start simultaneously, causing resource contention.
+  // Buffer.from() for stdin (in claude.ts) prevents file-system race conditions
+  // but does NOT eliminate the need for stagger — both are required.
+  // Phase C (review) does NOT need stagger: only 3 processes, no task-level parallelism.
+  const STAGGER_MS = 2_000;
 
-  const personaPromises = personaIds.map(async (personaId): Promise<PersonaResult> => {
+  const personaPromises = personaIds.map(async (personaId, idx) => {
     const persona = personas[personaId];
     if (!persona) {
       log.warn(`Persona '${personaId}' not found in personas.json, skipping`);
       return null;
     }
 
-    const fullSystemPrompt = `${persona.system_prompt}\n\nYou are analyzing a software engineering task as the '${persona.name}' persona. Apply your specific expertise and priorities when designing the implementation plan. Be concrete about file paths, function signatures, and code structure.\n\nYou have read-only access to the codebase via Read, Glob, and Grep tools. Use them to explore files beyond those provided in context when needed for a thorough plan.`;
+    // Stagger launches: first persona starts immediately, others wait
+    if (idx > 0) {
+      await Bun.sleep(idx * STAGGER_MS);
+    }
+
+    const explorationGuidance = persona.exploration_guidance
+      ? `\n\nYou have Read, Glob, and Grep tools to explore the codebase. ${persona.exploration_guidance}`
+      : "";
+    const fullSystemPrompt = `${persona.system_prompt}\n\nYou are analyzing a software engineering task as the '${persona.name}' persona. Apply your specific expertise and priorities when designing the implementation plan. Be concrete about file paths, function signatures, and code structure.${explorationGuidance}`;
 
     log.info(`  Starting persona: ${personaId} (${persona.name})`);
 
@@ -127,28 +147,23 @@ Be specific and concrete. Someone should be able to implement your plan without 
     return { personaId, response };
   });
 
-  // Wrap each promise with its index so we can identify which completed
-  const indexed = personaPromises.map((p, i) =>
-    p.then(
-      (result) => ({ index: i, result, error: null as unknown }),
-      (error) => ({ index: i, result: null as PersonaResult, error }),
-    ),
-  );
+  // Wait for all personas to complete (matching Phase C's proven pattern)
+  const results = await Promise.allSettled(personaPromises);
 
-  const remaining = new Map(indexed.map((p, i) => [i, p]));
-  let earlyTerminated = false;
-
-  while (remaining.size > 0) {
-    const raced = await Promise.race(remaining.values());
-    remaining.delete(raced.index);
-
-    if (raced.error || !raced.result) {
+  for (const result of results) {
+    if (result.status === "rejected") {
       failed++;
-      if (raced.error) log.warn(`  Persona failed: ${raced.error}`);
+      log.warn(`  Persona failed: ${result.reason}`);
       continue;
     }
 
-    const { personaId, response } = raced.result;
+    const value = result.value;
+    if (!value) {
+      failed++;
+      continue;
+    }
+
+    const { personaId, response } = value;
     const plan = getStructuredOutput<PlanOutput>(response);
     if (plan) {
       succeeded++;
@@ -156,29 +171,13 @@ Be specific and concrete. Someone should be able to implement your plan without 
       await recordCost(`task-${taskId}-persona-${personaId}`, cost);
       log.ok(`  Persona ${personaId} completed ($${cost.toFixed(2)})`);
       successfulPlans.push({ personaId, plan });
-
-      // Check for early termination: enough successful plans + high consensus
-      if (succeeded >= earlyTerminationThreshold && remaining.size > 0) {
-        const consensus = checkFileConsensus(successfulPlans);
-        if (consensus >= 0.7) {
-          log.info(`  ⚡ Early termination: ${succeeded} personas agree (${(consensus * 100).toFixed(0)}% file consensus), skipping ${remaining.size} remaining`);
-          earlyTerminated = true;
-          break;
-        }
-      }
     } else {
       failed++;
       log.warn(`  Persona ${personaId} returned no structured output`);
     }
   }
 
-  // Wait for remaining promises to avoid dangling (they'll complete in background)
-  if (earlyTerminated && remaining.size > 0) {
-    // Don't await, let them finish in background
-    Promise.allSettled([...remaining.values()]).catch(() => {});
-  }
-
-  log.info(`Personas: ${succeeded} succeeded, ${failed} failed${earlyTerminated ? " (early terminated)" : ""}`);
+  log.info(`Personas: ${succeeded} succeeded, ${failed} failed`);
 
   // --- Retry failed personas once if we don't have enough ---
   if (succeeded < minRequired && failed > 0) {
@@ -194,7 +193,10 @@ Be specific and concrete. Someone should be able to implement your plan without 
       const persona = personas[personaId];
       if (!persona) continue;
 
-      const fullSystemPrompt = `${persona.system_prompt}\n\nYou are analyzing a software engineering task as the '${persona.name}' persona. Apply your specific expertise and priorities when designing the implementation plan. Be concrete about file paths, function signatures, and code structure.\n\nYou have read-only access to the codebase via Read, Glob, and Grep tools. Use them to explore files beyond those provided in context when needed for a thorough plan.`;
+      const explorationGuidance = persona.exploration_guidance
+        ? `\n\nYou have Read, Glob, and Grep tools to explore the codebase. ${persona.exploration_guidance}`
+        : "";
+      const fullSystemPrompt = `${persona.system_prompt}\n\nYou are analyzing a software engineering task as the '${persona.name}' persona. Apply your specific expertise and priorities when designing the implementation plan. Be concrete about file paths, function signatures, and code structure.${explorationGuidance}`;
 
       log.info(`  Retrying persona: ${personaId} (${persona.name})`);
 
@@ -266,6 +268,13 @@ Be specific and concrete. Someone should be able to implement your plan without 
       const fakeResponse = { structured_output: convergedPlan, total_cost_usd: 0 };
       await Bun.write(`${taskDir2}/synthesis.json`, JSON.stringify(fakeResponse, null, 2));
       log.ok(`Single-plan fallback saved as synthesis for ${taskId}`);
+      try {
+        await recordConvergenceMetrics(taskId, {
+          persona_count: personaIds.length, successful_count: succeeded, file_consensus: 0,
+          synthesis_mode: "single_plan_fallback",
+          convergent_decisions_count: 1, divergences_resolved_count: 0, unique_insights_count: 0,
+        });
+      } catch { /* non-fatal */ }
       return true;
     }
 
@@ -275,7 +284,25 @@ Be specific and concrete. Someone should be able to implement your plan without 
   }
 
   // Synthesis
-  return runSynthesis(taskId, task, successfulPlans, config, outputDir, templatesDir);
+  const fileConsensus = checkFileConsensus(successfulPlans);
+  const synthesisOk = await runSynthesis(taskId, task, successfulPlans, config, outputDir, templatesDir);
+
+  if (synthesisOk) {
+    try {
+      const synthPath = `${taskDir}/synthesis.json`;
+      const synthData = JSON.parse(readFileSync(synthPath, "utf-8"));
+      const plan = synthData.structured_output as ConvergedPlan | null;
+      await recordConvergenceMetrics(taskId, {
+        persona_count: personaIds.length, successful_count: succeeded, file_consensus: fileConsensus,
+        synthesis_mode: "converged",
+        convergent_decisions_count: plan?.convergent_decisions?.length ?? 0,
+        divergences_resolved_count: plan?.resolved_divergences?.length ?? 0,
+        unique_insights_count: plan?.unique_insights_adopted?.length ?? 0,
+      });
+    } catch { /* non-fatal */ }
+  }
+
+  return synthesisOk;
 }
 
 /**
@@ -413,6 +440,14 @@ Create a step-by-step implementation plan. For convergent_decisions, list the ke
   const cost = response.total_cost_usd ?? 0;
   await recordCost(`task-${taskId}-direct-plan`, cost);
   log.ok(`Direct plan generated ($${cost.toFixed(2)})`);
+
+  try {
+    await recordConvergenceMetrics(taskId, {
+      persona_count: 0, successful_count: 0, file_consensus: 0,
+      synthesis_mode: "direct_plan",
+      convergent_decisions_count: 0, divergences_resolved_count: 0, unique_insights_count: 0,
+    });
+  } catch { /* non-fatal */ }
 
   return true;
 }

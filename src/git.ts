@@ -169,10 +169,18 @@ Write only the commit message, nothing else. Do not use conventional commit pref
   return true;
 }
 
-export async function gitRevertChanges(projectRoot: string): Promise<void> {
-  log.warn("Reverting uncommitted changes");
-  await run(["checkout", "--", "."], projectRoot);
-  await run(["clean", "-fd"], projectRoot);
+export async function gitRevertChanges(projectRoot: string, baseCommit?: string): Promise<void> {
+  if (baseCommit) {
+    // Reset to base commit — undoes both uncommitted changes AND intermediate commits
+    // made by review fix executors that may have shifted HEAD
+    log.warn(`Reverting all changes back to base commit ${baseCommit.slice(0, 8)}`);
+    await run(["reset", "--hard", baseCommit], projectRoot);
+    await run(["clean", "-fd"], projectRoot);
+  } else {
+    log.warn("Reverting uncommitted changes");
+    await run(["checkout", "--", "."], projectRoot);
+    await run(["clean", "-fd"], projectRoot);
+  }
 }
 
 export async function getGitLog(

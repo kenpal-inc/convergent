@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { log } from "./logger";
-import type { State, Task, TaskStatus, TaskStatusValue, TaskPhase } from "./types";
+import type { State, Task, TaskStatus, TaskStatusValue, TaskPhase, ConvergenceMetrics } from "./types";
 
 let outputDir = "";
 
@@ -200,6 +200,18 @@ export async function resetFailedTasks(): Promise<string[]> {
   await writeState(state);
 
   return resetIds;
+}
+
+export async function recordConvergenceMetrics(
+  taskId: string,
+  metrics: ConvergenceMetrics,
+): Promise<void> {
+  const state = await readState();
+  if (state.tasks_status[taskId]) {
+    state.tasks_status[taskId].convergence_metrics = metrics;
+    state.last_updated = new Date().toISOString();
+    await writeState(state);
+  }
 }
 
 export async function updatePrUrl(prUrl: string): Promise<void> {

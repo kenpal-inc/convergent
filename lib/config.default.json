@@ -6,16 +6,16 @@
     "executor": "opus"
   },
   "budget": {
-    "total_max_usd": 50.00,
+    "total_max_usd": 75.00,
     "per_task_max_usd": 10.00,
-    "per_persona_max_usd": 1.00,
+    "per_persona_max_usd": 2.50,
     "synthesis_max_usd": 2.00,
     "execution_max_usd": 5.00,
     "review_max_usd": 2.00,
     "per_review_persona_max_usd": 0.80
   },
   "parallelism": {
-    "persona_timeout_seconds": 120,
+    "persona_timeout_seconds": 600,
     "explore_timeout_seconds": 1200,
     "command_timeout_seconds": 600
   },

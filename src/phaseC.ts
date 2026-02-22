@@ -64,6 +64,7 @@ async function prepareReviewContext(
   projectRoot: string,
   templatesDir: string,
   retryInfo?: ReviewRetryInfo,
+  baseCommit?: string,
 ): Promise<{ context: ReviewContext; earlyReturn?: never } | { context?: never; earlyReturn: ReviewResult }> {
   const taskDir = `${outputDir}/logs/task-${taskId}`;
 
@@ -81,9 +82,9 @@ async function prepareReviewContext(
     return { earlyReturn: makeErrorResult("No structured plan in synthesis output") };
   }
 
-  // Get git diff (uncommitted changes)
-  const gitDiff = await getGitDiffUncommitted(projectRoot);
-  const gitDiffStat = await getGitDiffStatUncommitted(projectRoot);
+  // Get git diff (all changes since base commit, including any intermediate commits by review fix)
+  const gitDiff = await getGitDiffUncommitted(projectRoot, baseCommit);
+  const gitDiffStat = await getGitDiffStatUncommitted(projectRoot, baseCommit);
 
   if (!gitDiff.trim()) {
     log.warn("No changes detected in git diff - nothing to review");
@@ -349,6 +350,7 @@ export async function runPhaseC(
   outputDir: string,
   templatesDir: string,
   retryInfo?: ReviewRetryInfo,
+  baseCommit?: string,
 ): Promise<ReviewResult> {
   const taskDir = `${outputDir}/logs/task-${taskId}`;
   mkdirSync(taskDir, { recursive: true });
@@ -356,7 +358,7 @@ export async function runPhaseC(
   log.phase(`Phase C: Code review for '${task.title}'`);
 
   // Prepare shared context
-  const prepared = await prepareReviewContext(taskId, task, outputDir, projectRoot, templatesDir, retryInfo);
+  const prepared = await prepareReviewContext(taskId, task, outputDir, projectRoot, templatesDir, retryInfo, baseCommit);
   if (prepared.earlyReturn) {
     return prepared.earlyReturn;
   }
@@ -512,8 +514,9 @@ export function buildReviewFeedback(reviewResult: ReviewResult): string {
 
 // --- Git helpers ---
 
-async function getGitDiffUncommitted(projectRoot: string): Promise<string> {
-  const proc = Bun.spawn(["git", "diff", "HEAD"], {
+async function getGitDiffUncommitted(projectRoot: string, baseCommit?: string): Promise<string> {
+  const diffRef = baseCommit ?? "HEAD";
+  const proc = Bun.spawn(["git", "diff", diffRef], {
     cwd: projectRoot,
     stdout: "pipe",
     stderr: "pipe",
@@ -548,8 +551,9 @@ async function getGitDiffUncommitted(projectRoot: string): Promise<string> {
   return result;
 }
 
-async function getGitDiffStatUncommitted(projectRoot: string): Promise<string> {
-  const proc = Bun.spawn(["git", "diff", "--stat", "HEAD"], {
+async function getGitDiffStatUncommitted(projectRoot: string, baseCommit?: string): Promise<string> {
+  const diffRef = baseCommit ?? "HEAD";
+  const proc = Bun.spawn(["git", "diff", "--stat", diffRef], {
     cwd: projectRoot,
     stdout: "pipe",
     stderr: "pipe",

@@ -16,7 +16,7 @@ import { log, initLogging, setVerbose, die } from "./src/logger";
 import { loadConfig, applyOverrides } from "./src/config";
 import { initBudgetModule, initBudget, checkBudgetAvailable } from "./src/budget";
 import { initStateModule, initState, getTaskStatus, updateTaskStatus, getConsecutiveFailures, checkDependenciesMet, getTasksByStatus, countTasksByStatus, updatePrUrl, resetFailedTasks } from "./src/state";
-import { generateTaskQueue, refineTaskQueue } from "./src/phase0";
+import { generateTaskQueue, refineTaskQueue, researchInstructions } from "./src/phase0";
 import { runPhaseA } from "./src/phaseA";
 import { runPhaseB, runPhaseBRetry, runPhaseBRetryWithReview, runExploreTask, runCommandTask } from "./src/phaseB";
 import { runPhaseC, buildReviewFeedback, type ReviewRetryInfo } from "./src/phaseC";
@@ -420,6 +420,16 @@ async function main(): Promise<void> {
     console.log(`Context: ${args.context.join(", ")}`);
     console.log("");
 
+    // Research step: enrich instructions by fetching external references
+    let enrichedInstructions = args.instructions;
+    if (args.instructions) {
+      enrichedInstructions = await researchInstructions(
+        args.instructions,
+        config,
+        outputDir,
+      );
+    }
+
     taskQueue = await generateTaskQueue(
       args.goal,
       args.context,
@@ -427,7 +437,7 @@ async function main(): Promise<void> {
       projectRoot,
       outputDir,
       TEMPLATES_DIR,
-      args.instructions,
+      enrichedInstructions,
     );
 
     await initState();
@@ -674,13 +684,19 @@ async function main(): Promise<void> {
 
       // --- Code tasks: full Phase A → B → verify → review → commit flow ---
 
+      // Capture base commit before Phase B — review diffs are computed against this
+      // to handle cases where review fix executors may commit independently
+      const baseCommitProc = Bun.spawn(["git", "rev-parse", "HEAD"], { cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
+      const baseCommit = (await new Response(baseCommitProc.stdout).text()).trim();
+      await baseCommitProc.exited;
+
       // Phase B
       await updateTaskStatus(task.id, "in_progress", "B");
       const phaseBOk = await runPhaseB(task.id, task, config, projectRoot, outputDir, findingsFromDeps);
       if (!phaseBOk) {
         log.error(`Phase B failed for ${task.id}`);
         await recordFailureLearning(outputDir, task.id, "B", "Phase B implementation failed");
-        await gitRevertChanges(projectRoot);
+        await gitRevertChanges(projectRoot, baseCommit);
         await updateTaskStatus(task.id, "failed", "B");
         statusChangesThisIteration++;
         continue;
@@ -714,7 +730,7 @@ async function main(): Promise<void> {
             log.phase(`Phase C: Reviewing implementation for '${task.title}'${reviewAttempt > 0 ? ` (attempt ${reviewAttempt + 1})` : ''}`);
 
             try {
-              const reviewResult = await runPhaseC(task.id, task, config, projectRoot, outputDir, TEMPLATES_DIR, retryInfo);
+              const reviewResult = await runPhaseC(task.id, task, config, projectRoot, outputDir, TEMPLATES_DIR, retryInfo, baseCommit);
 
               if (reviewResult.verdict === "approved") {
                 log.ok(`Code review passed: ${reviewResult.summary}`);
@@ -744,8 +760,8 @@ async function main(): Promise<void> {
               const feedback = buildReviewFeedback(reviewResult);
               log.warn(`Code review requested changes (attempt ${reviewAttempt + 1}/${reviewMaxRetries}): ${reviewResult.summary}`);
 
-              // Capture current diff snapshot before fix attempt
-              const preDiffProc = Bun.spawn(["git", "diff", "HEAD"], { cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
+              // Capture current diff snapshot before fix attempt (diff against baseCommit to include any intermediate commits)
+              const preDiffProc = Bun.spawn(["git", "diff", baseCommit], { cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
               const preDiffSnapshot = await new Response(preDiffProc.stdout).text();
               await preDiffProc.exited;
 
@@ -765,8 +781,8 @@ async function main(): Promise<void> {
                 break;
               }
 
-              // Detect if the fix actually changed anything
-              const postDiffProc = Bun.spawn(["git", "diff", "HEAD"], { cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
+              // Detect if the fix actually changed anything (diff against baseCommit)
+              const postDiffProc = Bun.spawn(["git", "diff", baseCommit], { cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
               const postDiffSnapshot = await new Response(postDiffProc.stdout).text();
               await postDiffProc.exited;
 
@@ -798,7 +814,7 @@ async function main(): Promise<void> {
         if (!reviewApproved) {
           log.error(`Task ${task.id} failed code review after all retries`);
           await recordFailureLearning(outputDir, task.id, "review", "Code review not approved after all retries");
-          await gitRevertChanges(projectRoot);
+          await gitRevertChanges(projectRoot, baseCommit);
           await updateTaskStatus(task.id, "failed", "review");
           statusChangesThisIteration++;
           continue;
@@ -807,7 +823,7 @@ async function main(): Promise<void> {
         const commitOk = await gitCommitTask(task.id, task.title, config, projectRoot, outputDir);
         if (!commitOk) {
           log.error(`Git commit failed for task ${task.id}, marking as failed`);
-          await gitRevertChanges(projectRoot);
+          await gitRevertChanges(projectRoot, baseCommit);
           await updateTaskStatus(task.id, "failed", "commit");
           statusChangesThisIteration++;
           continue;
@@ -835,7 +851,7 @@ async function main(): Promise<void> {
       } else {
         log.error(`Task ${task.id} failed verification after all retries`);
         await recordFailureLearning(outputDir, task.id, "verify", "Verification (lint/typecheck/test) failed after all retries");
-        await gitRevertChanges(projectRoot);
+        await gitRevertChanges(projectRoot, baseCommit);
         await updateTaskStatus(task.id, "failed", "verify");
         statusChangesThisIteration++;
       }
@@ -959,6 +975,21 @@ async function printSummary(outputDir: string, iteration?: number, stoppedReason
     console.log(`    Status:  ${log.green(String(finalCounts.completed))} completed | ${log.red(String(finalCounts.failed))} failed | ${log.yellow(String(finalCounts.blocked))} blocked | ${log.blue(String(finalCounts.pending))} pending | ${log.cyan(String(finalCounts.in_progress))} in_progress`);
     console.log(`    Check:   ${calculatedTotal === totalTasks ? '✓' : '✗'} Sum matches total (${calculatedTotal})`);
     console.log(`  Cost:      $${(budget.total_usd ?? 0).toFixed(2)}`);
+
+    // Convergence stats
+    const tasksStatus = state.tasks_status ?? {};
+    let convergedCount = 0;
+    let fallbackCount = 0;
+    for (const ts of Object.values(tasksStatus)) {
+      const metrics = (ts as any).convergence_metrics;
+      if (!metrics) continue;
+      if (metrics.synthesis_mode === 'converged') convergedCount++;
+      else fallbackCount++;
+    }
+    if (convergedCount + fallbackCount > 0) {
+      console.log(`  Convergence: ${convergedCount} converged, ${fallbackCount} fallback`);
+    }
+
     console.log(`  Logs:      ${outputDir}/logs/`);
     console.log(`  State:     ${outputDir}/state.json`);
 

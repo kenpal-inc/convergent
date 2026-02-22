@@ -78,10 +78,21 @@ export type TaskStatusValue =
 
 export type TaskPhase = "A" | "B" | "verify" | "review" | "commit";
 
+export interface ConvergenceMetrics {
+  persona_count: number;
+  successful_count: number;
+  file_consensus: number;
+  synthesis_mode: "converged" | "single_plan_fallback" | "direct_plan";
+  convergent_decisions_count: number;
+  divergences_resolved_count: number;
+  unique_insights_count: number;
+}
+
 export interface TaskStatus {
   status: TaskStatusValue;
   phase?: TaskPhase;
   completed_at?: string;
+  convergence_metrics?: ConvergenceMetrics;
 }
 
 export interface State {
@@ -113,6 +124,7 @@ export interface Budget {
 export interface Persona {
   name: string;
   system_prompt: string;
+  exploration_guidance?: string;
 }
 
 export type PersonaMap = Record<string, Persona>;
