@@ -37,7 +37,7 @@
         <div class="hero-content">
           <h1 class="hero-wordmark">convergent</h1>
           <p class="hero-tagline">Autonomous development orchestrator for Claude Code</p>
-          <p class="hero-desc">Multiple AI personas independently design solutions, then converge on the optimal implementation.</p>
+          <p class="hero-desc">Multiple competing implementations race in parallel. Objective verification selects the fittest. This is natural selection for code.</p>
 
           <div class="hero-install">
             <code>curl -fsSL https://raw.githubusercontent.com/kenpal-inc/convergent/main/install.sh | bash</code>
@@ -96,7 +96,7 @@
 
           <div class="fade-in">
             <p>Six unrelated plant species independently evolved the same molecule. When different paths converge on the same answer, <strong style="color: var(--text-primary);">that answer is likely optimal.</strong></p>
-            <p><strong style="color: var(--accent);">convergent</strong> applies this to code: multiple AI personas with different priorities analyze the same problem, then a synthesizer merges what they agree on.</p>
+            <p><strong style="color: var(--accent);">convergent</strong> applies this to code: multiple competing implementations run in parallel git worktrees, each verified objectively (typecheck, lint, tests), and an AI judge selects the fittest survivor.</p>
           </div>
         </div>
       </div>
@@ -116,16 +116,10 @@
             <p>Analyzes your codebase and goal, decomposes into a structured task queue with dependency graph. Assigns types: code, explore, or command.</p>
           </div>
           <div class="phase-card fade-in">
-            <div class="phase-label">Phase A</div>
-            <div class="phase-icon">&#129528;</div>
-            <h3>Convergence</h3>
-            <p>3&ndash;7 personas plan in parallel with different priorities. Early termination on high consensus. Synthesizer merges the optimal plan.</p>
-          </div>
-          <div class="phase-card fade-in">
-            <div class="phase-label">Phase B</div>
-            <div class="phase-icon">&#9000;</div>
-            <h3>Execution</h3>
-            <p>Executes the converged plan with cross-task learnings as context. Runs verification (lint, typecheck, test) and retries on failure.</p>
+            <div class="phase-label">Phase T</div>
+            <div class="phase-icon">&#9876;</div>
+            <h3>Tournament</h3>
+            <p>N competing implementations race in parallel git worktrees. Each is verified objectively (typecheck, lint, tests). An AI judge picks the fittest survivor.</p>
           </div>
           <div class="phase-card fade-in">
             <div class="phase-label">Phase C</div>
@@ -139,51 +133,31 @@
       </div>
     </section>
 
-    <!-- ================================ Personas ================================ -->
+    <!-- ================================ Competitors ================================ -->
     <section class="personas" id="personas">
       <div class="container">
-        <h2 class="fade-in">7 Perspectives, One Solution</h2>
-        <p class="section-subtitle fade-in">Each persona brings a different priority. What they converge on is the best approach.</p>
+        <h2 class="fade-in">Competing Strategies</h2>
+        <p class="section-subtitle fade-in">Each competitor implements the same task with a different philosophy. The fittest survives.</p>
 
         <div class="persona-grid">
           <div class="persona-card fade-in" style="--i: 0">
-            <div class="persona-icon">&#128737;</div>
-            <h3>conservative</h3>
-            <p>Stability, proven patterns, comprehensive error handling</p>
-          </div>
-          <div class="persona-card fade-in" style="--i: 1">
-            <div class="persona-icon">&#10134;</div>
-            <h3>minimalist</h3>
-            <p>Least code possible, eliminate unnecessary abstractions</p>
-          </div>
-          <div class="persona-card fade-in" style="--i: 2">
-            <div class="persona-icon">&#129514;</div>
-            <h3>tdd</h3>
-            <p>Tests first, edge case coverage, test-driven design</p>
-          </div>
-          <div class="persona-card fade-in" style="--i: 3">
-            <div class="persona-icon">&#9889;</div>
-            <h3>performance</h3>
-            <p>Algorithm efficiency, bundle size, rendering speed</p>
-          </div>
-          <div class="persona-card fade-in" style="--i: 4">
-            <div class="persona-icon">&#128100;</div>
-            <h3>ux</h3>
-            <p>Loading states, error messages, accessibility</p>
-          </div>
-          <div class="persona-card fade-in" style="--i: 5">
-            <div class="persona-icon">&#128274;</div>
-            <h3>security</h3>
-            <p>Input validation, auth boundaries, XSS/CSRF prevention</p>
-          </div>
-          <div class="persona-card fade-in" style="--i: 6">
             <div class="persona-icon">&#128295;</div>
             <h3>pragmatist</h3>
-            <p>Ship working software, practical trade-offs</p>
+            <p>Follow the plan precisely. No deviations, no extras. Ship exactly what was specified.</p>
+          </div>
+          <div class="persona-card fade-in" style="--i: 1">
+            <div class="persona-icon">&#128737;</div>
+            <h3>thorough</h3>
+            <p>Comprehensive implementation with defensive validation, edge case handling, and robust error recovery.</p>
+          </div>
+          <div class="persona-card fade-in" style="--i: 2">
+            <div class="persona-icon">&#128269;</div>
+            <h3>deconstructor</h3>
+            <p>Challenge assumptions. Question the plan, find better approaches, refactor when warranted.</p>
           </div>
         </div>
 
-        <p class="persona-note fade-in">Trivial tasks skip personas entirely. Standard tasks use 3. Complex tasks use all 7.</p>
+        <p class="persona-note fade-in">Trivial tasks use 1 competitor. Standard and complex tasks run a full tournament.</p>
       </div>
     </section>
 
@@ -211,7 +185,7 @@
             <div class="feature-icon">&#128176;</div>
             <div>
               <h3>Budget Control</h3>
-              <p>Per-persona, per-task, and total budget caps in USD. Automatic shutdown on exhaustion.</p>
+              <p>Per-task and total budget caps in USD. Automatic shutdown on exhaustion.</p>
             </div>
           </div>
           <div class="feature-item fade-in">
@@ -285,7 +259,7 @@ convergent --resume'>Copy</button>
     <section class="output" id="output">
       <div class="container">
         <h2 class="fade-in">Full Transparency</h2>
-        <p class="section-subtitle fade-in">Every decision is logged. Every persona output is inspectable.</p>
+        <p class="section-subtitle fade-in">Every decision is logged. Every competitor output is inspectable.</p>
 
         <div class="output-tree fade-in">
           <pre>.convergent/
@@ -301,12 +275,10 @@ convergent --resume'>Copy</button>
         &#9474;   &#9492;&#9472;&#9472; task-001.md
         &#9492;&#9472;&#9472; logs/
             &#9500;&#9472;&#9472; orchestrator.log
-            &#9492;&#9472;&#9472; task-001/
-                &#9500;&#9472;&#9472; persona-conservative.json
-                &#9500;&#9472;&#9472; persona-tdd.json
-                &#9500;&#9472;&#9472; persona-security.json
-                &#9500;&#9472;&#9472; synthesis.json
-                &#9500;&#9472;&#9472; execution.log
+            &#9492;&#9472;&#9472; task-task-001/
+                &#9500;&#9472;&#9472; competitor-0.log
+                &#9500;&#9472;&#9472; competitor-1.log
+                &#9500;&#9472;&#9472; judge.json
                 &#9500;&#9472;&#9472; verify.log
                 &#9492;&#9472;&#9472; review.json</pre>
         </div>

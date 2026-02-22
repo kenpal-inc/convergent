@@ -4,35 +4,37 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Bun](https://img.shields.io/badge/runtime-Bun-%23fbf0df?logo=bun)](https://bun.sh/)
 
-Autonomous development orchestrator for Claude Code. Give it a codebase context and a goal — it decomposes work into tasks and uses a **convergent evolution** approach: multiple AI personas independently design solutions, then a synthesizer merges the best elements into an optimal implementation plan.
+Autonomous development orchestrator for Claude Code. Give it a codebase context and a goal — it decomposes work into tasks and uses **tournament-based convergent evolution**: multiple competing implementations race in parallel git worktrees, each verified objectively (typecheck, lint, tests), and an AI judge selects the fittest survivor.
 
 ## How It Works
 
 ```
 Phase 0: Task Generation
   Input: --context (files/dirs) + --goal (natural language) + --instructions (optional)
+  → Researches external references (GitHub issues, URLs)
   → Generates a structured task queue with dependency graph
   → Assigns task types: code | explore | command
         │
         ▼
-┌─────────────────────────────────────────────────────────────┐
-│ Branching by task type:                                     │
-│                                                             │
-│ [code]    ── Phase A → Phase B → Verify → Phase C → Commit  │
-│ [explore] ── Direct execution (investigation → findings.md) │
-│ [command] ── Direct execution (deploy, run scripts, etc.)   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ Branching by task type:                                          │
+│                                                                  │
+│ [code]    ── Phase T (tournament) → Verify → Phase C → Commit    │
+│ [explore] ── Direct execution (investigation → findings.md)      │
+│ [command] ── Direct execution (deploy, run scripts, etc.)        │
+└──────────────────────────────────────────────────────────────────┘
 
 code task flow:
-  Phase A: Convergent Evolution
-    → Spawns 3–7 personas in parallel (each with Read/Glob/Grep access)
-    → Early termination on high consensus
-    → Synthesizer merges the optimal plan
+  Phase T: Tournament
+    → Creates N parallel git worktrees from the current commit
+    → Each competitor implements the task with a different strategy
+    → Each is verified in its worktree (typecheck, lint, tests, format)
+    → AI judge compares passing implementations and selects the best
+    → Winner's changes are applied to the main working tree
           │
           ▼
-  Phase B: Implementation
-    → Executes the converged plan (with learnings + explore findings as context)
-    → Runs verification (lint, typecheck, test) → retries on failure
+  Verify: Main-tree verification
+    → Runs verification in the main working tree after applying winner
           │
           ▼
   Phase C: Multi-Persona Code Review
@@ -51,23 +53,23 @@ Loops until all tasks complete or budget is exhausted.
 
 ### What Is Convergent Evolution?
 
-The core idea: when multiple independent agents with different priorities analyze the same problem, the elements they **converge on** are likely the best approach. Disagreements are resolved by a synthesizer that weighs the rationale behind each perspective.
+The core idea: when multiple independent implementations with different strategies solve the same problem, the elements they **converge on** are likely the best approach. Disagreements are resolved by an AI judge that evaluates code quality, correctness, and robustness.
 
-Personas are assigned based on task complexity:
+Competitor strategies are assigned based on task complexity:
 
-| Complexity | Personas | Use Case |
-|------------|----------|----------|
-| `trivial` | None (direct plan generation) | Single file, simple changes |
-| `standard` | pragmatist, tdd, security | 2–5 files, moderate logic |
-| `complex` | All 7 personas | 6+ files, architectural changes |
+| Complexity | Competitors | Use Case |
+|------------|-------------|----------|
+| `trivial` | 1 (single implementation) | Single file, simple changes |
+| `standard` | 2 (pragmatist, thorough) | 2–5 files, moderate logic |
+| `complex` | 3 (pragmatist, thorough, deconstructor) | 6+ files, architectural changes |
 
 ### Task Types
 
 Phase 0 analyzes the goal and automatically assigns the appropriate type to each task:
 
-| Type | Purpose | Phase A | Verify | Review |
-|------|---------|---------|--------|--------|
-| `code` | Code implementation/modification (default) | Persona convergence | lint/typecheck/test | Multi-persona review |
+| Type | Purpose | Tournament | Verify | Review |
+|------|---------|------------|--------|--------|
+| `code` | Code implementation/modification (default) | N competing implementations | typecheck/lint/test/format | Multi-persona review |
 | `explore` | Exploratory testing, investigation, information gathering | Skipped | None | None |
 | `command` | Deploy, migration, script execution | Skipped | None | None |
 
@@ -189,15 +191,15 @@ convergent --resume
 
 ### Dry Run → Execute Workflow
 
-Use `--dry-run` to run Phase 0 (task generation) and Phase A (plan design) only, then review plans before executing:
+Use `--dry-run` to run Phase 0 (task generation) only, then review the task queue before executing:
 
 ```bash
-# 1. Generate tasks + plans
+# 1. Generate tasks
 convergent \
   --context "src/" --goal "Implement authentication" --dry-run
 
-# 2. Review plans
-cat .convergent/latest/logs/task-001/synthesis.json | jq .
+# 2. Review task queue
+cat .convergent/latest/tasks.json | jq .
 
 # 3. Execute
 convergent --resume
@@ -210,62 +212,59 @@ Place a `convergent.config.json` in your project root to customize:
 ```json
 {
   "models": {
-    "planner": "sonnet",
-    "persona": "sonnet",
-    "synthesizer": "opus",
-    "executor": "sonnet"
+    "planner": "opus",
+    "executor": "opus"
   },
   "budget": {
-    "total_max_usd": 50.00,
-    "per_task_max_usd": 10.00,
-    "per_persona_max_usd": 1.00,
-    "synthesis_max_usd": 2.00,
+    "total_max_usd": 75.00,
+    "per_task_max_usd": 15.00,
+    "plan_max_usd": 2.00,
     "execution_max_usd": 5.00,
     "review_max_usd": 2.00,
     "per_review_persona_max_usd": 0.80
   },
   "parallelism": {
-    "persona_timeout_seconds": 120,
-    "max_parallel_tasks": 3
+    "tournament_timeout_seconds": 1800,
+    "explore_timeout_seconds": 1200,
+    "command_timeout_seconds": 600
+  },
+  "tournament": {
+    "competitors": 3,
+    "strategies": ["pragmatist", "thorough", "deconstructor"]
   },
   "verification": {
-    "commands": ["bun lint", "bun typecheck", "bun test"],
-    "max_retries": 2,
-    "timeout_seconds": 300,
-    "parallel": true
+    "auto_detect": true,
+    "commands": [],
+    "max_retries": 2
   },
   "review": {
     "enabled": true,
     "max_retries": 2,
     "personas": ["correctness", "security", "maintainability"]
   },
-  "personas": {
-    "trivial": [],
-    "standard": ["pragmatist", "tdd", "security"],
-    "complex": ["conservative", "minimalist", "tdd", "performance", "ux", "security", "pragmatist"]
-  },
   "git": {
-    "auto_commit": true
+    "auto_commit": true,
+    "create_branch": false,
+    "create_pr": false
   }
 }
 ```
 
 ### Verification Commands
 
-Set your project's quality checks in `verification.commands`. The orchestrator runs these after each task implementation:
+By default, convergent auto-detects your project's quality checks (looking for `tsconfig.json`, `package.json` scripts for lint/test, and prettier). Override with `verification.commands`:
 
 ```json
 {
   "verification": {
+    "auto_detect": false,
     "commands": ["npm run lint", "npm run typecheck", "npm test"],
     "max_retries": 2
   }
 }
 ```
 
-On failure, error output is fed back as context for a Phase B retry. After `max_retries` failures, the task is marked as failed and changes are reverted.
-
-Set `verification.commands` to `[]` to skip verification.
+Each tournament competitor is verified in its own worktree. The winner is then verified again in the main working tree. On failure, error output is fed back as context for review retry.
 
 ## Output
 
@@ -288,12 +287,10 @@ All runtime data is stored in `.convergent/` (already in `.gitignore`). Each run
     │       ├── phase0/
     │       │   ├── raw_output.json
     │       │   └── project_summary.md   # project structure summary
-    │       └── task-001/
-    │           ├── persona-conservative.json
-    │           ├── persona-tdd.json
-    │           ├── persona-security.json
-    │           ├── synthesis.json        # converged plan
-    │           ├── execution.log
+    │       └── task-task-001/
+    │           ├── competitor-0.log      # pragmatist implementation log
+    │           ├── competitor-1.log      # thorough implementation log
+    │           ├── judge.json            # AI judge decision + rationale
     │           ├── verify.log
     │           ├── review-correctness.json
     │           ├── review-security.json
@@ -318,9 +315,9 @@ While `--goal` sets the overall direction, `--instructions` / `--instructions-fi
 
 ### Context Quality
 
-- **Import dependency tracing**: Traces import/require from task `context_files` to discover related files automatically, included in Phase A and Phase B prompts
-- **Project structure summary**: Phase 0 auto-generates a listing of source files with one-line descriptions, giving Phase A personas a bird's-eye view
-- **Persona Read tool access**: Phase A personas can use Read, Glob, and Grep tools to explore the codebase beyond the provided context
+- **Import dependency tracing**: Traces import/require from task `context_files` to discover related files automatically, included in tournament competitor prompts
+- **Project structure summary**: Phase 0 auto-generates a listing of source files with one-line descriptions, giving competitors a bird's-eye view
+- **Tool access**: Tournament competitors can use Read, Write, Edit, Glob, Grep, and Bash tools to explore and modify the codebase
 - **Signature extraction**: Source files in directories have their export/type/interface/function signatures extracted (instead of just the first 100 lines), providing an overview of each file's public API
 
 ### Cross-Task Learning
@@ -331,20 +328,21 @@ While `--goal` sets the overall direction, `--instructions` / `--instructions-fi
 
 ### Execution Efficiency
 
-- **Phase A early termination**: When enough personas have completed and file-level consensus reaches 70%+, remaining personas are skipped and synthesis proceeds
-- **Phase A parallel prefetch**: Phase A (plan design) runs in parallel for tasks with no dependencies, since Phase A is read-only and safe to parallelize (default: up to 3 concurrent)
-- **Parallel verification**: lint, typecheck, and test run in parallel to reduce verification time
+- **Parallel tournament**: Multiple competitors implement simultaneously in isolated git worktrees
+- **Convergence analysis**: When competitors modify the same files, convergence ratio is measured — high agreement confirms solution quality
+- **Parallel verification**: lint, typecheck, test, and format run in parallel to reduce verification time
+- **Auto-detected verification**: Automatically discovers project tooling (tsconfig.json, lint scripts, test scripts, prettier) — no manual configuration needed
 - **Differential review**: On Phase C retry, review focuses on the diff between the previous review feedback and the current changes
 
 ## Fault Tolerance
 
-### Phase A Retry + Fallback
+### Tournament Resilience
 
-Graduated recovery when personas fail to produce structured output:
+Graduated recovery when competitors fail:
 
-1. **Auto-retry**: Failed personas are retried once (until minimum count is met)
-2. **Single-plan adoption**: If only one persona succeeds, synthesis is skipped and that plan is used directly
-3. **Direct plan**: If all personas fail, a plan is generated without personas
+1. **Partial success**: If some competitors fail but at least one succeeds, the tournament proceeds with the successful implementations
+2. **Score-based selection**: Winner is selected by objective verification score (typecheck=30, tests=40, lint=15, format=15). On tie, AI judge breaks it by evaluating code quality
+3. **Single competitor fallback**: Trivial tasks skip tournament overhead and run a single implementation
 
 ### Review Severity Filter
 
@@ -356,7 +354,7 @@ After a review fix attempt, if `git diff` shows no changes, the fix agent was un
 
 ### Smart Circuit Breaker
 
-Phase A structured output failures (persona output format issues) are treated as soft failures and don't count toward the circuit breaker. Only substantive failures in implementation and review are counted, with a threshold of 3 consecutive failures.
+Tournament failures where no competitor produces valid output are counted toward the circuit breaker. Partial failures (some competitors fail but winner exists) are not counted. Threshold: 3 consecutive substantive failures.
 
 ### Exponential Backoff Retry
 
@@ -372,9 +370,10 @@ Verification commands (lint, typecheck, test) have a configurable timeout (defau
 
 ## Safety
 
-- **Budget limits**: Per-persona, per-task, and total budget caps
-- **Circuit breaker**: Stops after 3 consecutive task failures (Phase A output failures excluded)
-- **Verification gate**: Changes aren't committed unless lint + typecheck + test pass
+- **Budget limits**: Per-task and total budget caps
+- **Circuit breaker**: Stops after 3 consecutive task failures
+- **Tournament isolation**: Each competitor runs in its own git worktree — failures can't corrupt the main tree
+- **Verification gate**: Winner's changes are verified in both the worktree and the main working tree
 - **Multi-persona review gate**: After verification, 3 specialist reviewers audit correctness, security, and maintainability in parallel (any rejection triggers a fix)
 - **Auto-revert**: Failed task changes are automatically rolled back
 - **Resumable**: State is saved on Ctrl+C, resume with `--resume`
@@ -393,25 +392,21 @@ Instead, it provides **observation and control** through these mechanisms:
 | Terminal output | Real-time observation (progress, cost, pass/fail) |
 | Ctrl+C → `--resume` | Emergency stop and resume |
 | `--review` flag | Pause after Phase 0 to inspect task queue |
-| `--dry-run` flag | Run through Phase A (planning) only, review before implementing |
+| `--dry-run` flag | Run through Phase 0 (task generation) only, review before implementing |
 | `--refine` flag | Modify task queue with natural language (repeatable) |
 | Budget limits + circuit breaker | Automatic runaway prevention |
 
 "Not knowing what's happening" is addressed by logs and terminal output. "I want to stop" is handled by Ctrl+C. If you want to change direction mid-run, stop and re-run with an updated goal — this produces better results than mid-stream intervention.
 
-## Personas
+## Competitor Strategies
 
-| Persona | Focus |
-|---------|-------|
-| conservative | Stability, proven patterns, error handling |
-| minimalist | Minimal code, eliminating unnecessary abstractions |
-| tdd | Test-first design, edge case coverage |
-| performance | Algorithm efficiency, bundle size, rendering |
-| ux | Loading states, error messages, accessibility |
-| security | Input validation, auth boundaries, XSS/CSRF |
-| pragmatist | Ship working software, practical trade-offs |
+| Strategy | Focus |
+|----------|-------|
+| pragmatist | Follow the plan precisely, no deviations, ship exactly what was specified |
+| thorough | Comprehensive implementation with defensive validation, edge cases, robust error recovery |
+| deconstructor | Challenge assumptions, find better approaches, refactor when warranted |
 
-Customize personas by editing `lib/personas.json`.
+Customize strategies by editing `lib/competitors.json`.
 
 ## Review Personas
 
