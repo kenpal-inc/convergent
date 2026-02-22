@@ -3,7 +3,7 @@ import { resolve, dirname } from "path";
 import { log } from "./logger";
 import { callClaude, getStructuredOutput } from "./claude";
 import { recordCost } from "./budget";
-import type { Config, ConvergedPlan, Persona, PersonaMap, ReviewCriterionCheck, ReviewIssue, ReviewResult, Task } from "./types";
+import type { Config, ConvergedPlan, ReviewPersona, ReviewPersonaMap, ReviewCriterionCheck, ReviewIssue, ReviewResult, Task } from "./types";
 
 // Fallback system prompt for single-reviewer mode (when no review personas configured)
 const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer performing a semantic review of implementation changes.
@@ -177,17 +177,17 @@ Review the git diff against the converged plan and acceptance criteria. Determin
 async function runSingleReview(
   taskId: string,
   personaId: string,
-  persona: Persona,
+  persona: ReviewPersona,
   reviewContext: ReviewContext,
   config: Config,
   taskDir: string,
 ): Promise<{ personaId: string; result: ReviewResult; cost: number } | null> {
-  const timeoutMs = config.parallelism.persona_timeout_seconds * 1000;
+  const timeoutMs = config.parallelism.tournament_timeout_seconds * 1000;
 
   const response = await callClaude({
     prompt: reviewContext.prompt,
     systemPrompt: persona.system_prompt,
-    model: config.models.synthesizer,
+    model: config.models.executor,
     maxBudgetUsd: config.budget.per_review_persona_max_usd ?? config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
     tools: "",
@@ -312,7 +312,7 @@ async function runSingleReviewLegacy(
   const response = await callClaude({
     prompt: reviewContext.prompt,
     systemPrompt: REVIEW_SYSTEM_PROMPT,
-    model: config.models.synthesizer,
+    model: config.models.executor,
     maxBudgetUsd: config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
     tools: "",
@@ -379,7 +379,7 @@ export async function runPhaseC(
     log.warn("review_personas.json not found, falling back to single reviewer");
     return runSingleReviewLegacy(taskId, reviewContext, config, taskDir);
   }
-  const reviewPersonas: PersonaMap = JSON.parse(readFileSync(reviewPersonasPath, "utf-8"));
+  const reviewPersonas: ReviewPersonaMap = JSON.parse(readFileSync(reviewPersonasPath, "utf-8"));
 
   log.info(`Launching ${reviewPersonaIds.length} review personas in parallel...`);
 

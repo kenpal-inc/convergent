@@ -31,6 +31,7 @@ export async function researchInstructions(
   instructions: string,
   config: Config,
   outputDir: string,
+  projectRoot?: string,
 ): Promise<string> {
   log.phase("Phase 0 (prep): Researching instructions");
   mkdirSync(`${outputDir}/logs/phase0`, { recursive: true });
@@ -43,10 +44,11 @@ export async function researchInstructions(
     prompt,
     systemPrompt: RESEARCH_SYSTEM_PROMPT,
     model: "sonnet",
-    maxBudgetUsd: config.budget.per_persona_max_usd,
+    maxBudgetUsd: config.budget.plan_max_usd,
     dangerouslySkipPermissions: true,
     timeoutMs: RESEARCH_TIMEOUT_MS,
     logFile: `${outputDir}/logs/phase0/research.log`,
+    cwd: projectRoot,
   });
 
   await Bun.write(`${outputDir}/logs/phase0/research_output.json`, JSON.stringify(response, null, 2));

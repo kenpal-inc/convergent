@@ -268,32 +268,39 @@ export async function generateSummaryReport(
     }
     lines.push('');
 
-    // 6b. Convergence evolution metrics
+    // 6b. Tournament metrics
     const tasksWithMetrics = taskList
       .map(t => {
         const statusObj = taskStatuses[t.id];
-        const metrics = typeof statusObj === 'object' ? (statusObj as any).convergence_metrics : undefined;
+        const metrics = typeof statusObj === 'object' ? (statusObj as any).tournament_metrics : undefined;
         return { id: t.id, metrics };
       })
       .filter(t => t.metrics);
 
     if (tasksWithMetrics.length > 0) {
-      lines.push('## Convergence Evolution Metrics');
+      lines.push('## Tournament Results');
       lines.push('');
-      lines.push('| Task | Personas | Succeeded | Consensus | Mode | Decisions | Divergences | Insights |');
-      lines.push('|------|----------|-----------|-----------|------|-----------|-------------|----------|');
+      lines.push('| Task | Competitors | Succeeded | Winner | Score | Convergence | Diff Lines |');
+      lines.push('|------|-------------|-----------|--------|-------|-------------|------------|');
 
       for (const { id, metrics: m } of tasksWithMetrics) {
-        lines.push(`| ${id} | ${m.persona_count} | ${m.successful_count} | ${(m.file_consensus * 100).toFixed(0)}% | ${m.synthesis_mode} | ${m.convergent_decisions_count} | ${m.divergences_resolved_count} | ${m.unique_insights_count} |`);
+        const conv = m.convergence_ratio !== undefined ? `${(m.convergence_ratio * 100).toFixed(0)}%` : '-';
+        const diffLines = m.diff_lines_winner !== undefined ? String(m.diff_lines_winner) : '-';
+        lines.push(`| ${id} | ${m.competitors_count} | ${m.implementations_succeeded} | ${m.winner_strategy} | ${m.winner_score} | ${conv} | ${diffLines} |`);
       }
 
-      const converged = tasksWithMetrics.filter(t => t.metrics.synthesis_mode === 'converged').length;
-      const fallback = tasksWithMetrics.filter(t => t.metrics.synthesis_mode === 'single_plan_fallback').length;
-      const direct = tasksWithMetrics.filter(t => t.metrics.synthesis_mode === 'direct_plan').length;
-      const avgConsensus = tasksWithMetrics.reduce((s, t) => s + t.metrics.file_consensus, 0) / tasksWithMetrics.length;
+      const avgScore = tasksWithMetrics.reduce((s, t) => s + t.metrics.winner_score, 0) / tasksWithMetrics.length;
+      const withConvergence = tasksWithMetrics.filter(t => t.metrics.convergence_ratio !== undefined);
+      const avgConvergence = withConvergence.length > 0
+        ? withConvergence.reduce((s, t) => s + t.metrics.convergence_ratio, 0) / withConvergence.length
+        : undefined;
 
       lines.push('');
-      lines.push(`**Summary**: ${converged} converged, ${fallback} single-plan fallback, ${direct} direct plan. Average file consensus: ${(avgConsensus * 100).toFixed(0)}%.`);
+      let summary = `**Summary**: ${tasksWithMetrics.length} tournaments. Average winner score: ${avgScore.toFixed(0)}.`;
+      if (avgConvergence !== undefined) {
+        summary += ` Average convergence: ${(avgConvergence * 100).toFixed(0)}%.`;
+      }
+      lines.push(summary);
       lines.push('');
     }
 

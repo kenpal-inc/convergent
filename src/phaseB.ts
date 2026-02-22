@@ -1,10 +1,9 @@
 import { existsSync, readFileSync, mkdirSync } from "fs";
 import { log } from "./logger";
-import { callClaude, getStructuredOutput } from "./claude";
+import { callClaude } from "./claude";
 import { buildTaskContext } from "./context";
 import { recordCost } from "./budget";
-import { buildLearningsContext } from "./learnings";
-import type { Config, ConvergedPlan, Task } from "./types";
+import type { Config, Task } from "./types";
 
 // --- Explore task ---
 
@@ -30,28 +29,7 @@ Rules:
 - Record the output of each command for reference.
 - Do NOT modify source code unless the task description explicitly requires it.`;
 
-// --- Code task (existing) ---
-
-const EXECUTION_SYSTEM_PROMPT = `You are an expert software developer executing a precise implementation plan.
-
-Rules:
-- Follow the implementation plan step by step. Do not deviate unless you find a clear error.
-- Create all files and make all changes specified in the plan.
-- Write all test files and test cases specified in the plan.
-- Read existing files first before modifying them to understand current state.
-- Ensure your code follows the patterns and conventions already present in the codebase.
-- After completing implementation, verify that new code compiles/parses correctly.
-- Do not make changes outside the scope of the plan.
-- Do not add extra features, refactoring, or improvements beyond what the plan specifies.`;
-
-const FIX_SYSTEM_PROMPT = `You are an expert software developer fixing verification failures. The previous implementation attempt failed lint, typecheck, or tests. Your job is to fix the issues while staying true to the original implementation plan.
-
-Rules:
-- Focus on fixing the specific errors shown in the verification output.
-- Do not make unrelated changes.
-- Read the affected files to understand their current state before making fixes.
-- If a test is failing, understand why and fix the implementation (not the test), unless the test itself has a bug.
-- Maintain consistency with existing codebase patterns.`;
+// --- Code task: review fix retry ---
 
 const REVIEW_FIX_SYSTEM_PROMPT = `You are an expert software developer fixing issues found during code review. The implementation passed lint, typecheck, and tests, but a semantic code review identified problems.
 
@@ -63,141 +41,6 @@ Rules:
 - Do not make unrelated changes.
 - Read the affected files to understand their current state before making fixes.
 - Maintain consistency with existing codebase patterns.`;
-
-export async function runPhaseB(
-  taskId: string,
-  task: Task,
-  config: Config,
-  projectRoot: string,
-  outputDir: string,
-  findingsFromDeps?: string,
-): Promise<boolean> {
-  const taskDir = `${outputDir}/logs/task-${taskId}`;
-  mkdirSync(taskDir, { recursive: true });
-
-  log.phase(`Phase B: Implementing '${task.title}'`);
-
-  // Load converged plan
-  const synthesisPath = `${taskDir}/synthesis.json`;
-  if (!existsSync(synthesisPath)) {
-    log.error(`No converged plan found for task ${taskId}`);
-    return false;
-  }
-
-  const synthesisResponse = JSON.parse(readFileSync(synthesisPath, "utf-8"));
-  const convergedPlan = synthesisResponse.structured_output;
-  if (!convergedPlan) {
-    log.error(`No structured_output in synthesis for task ${taskId}`);
-    return false;
-  }
-
-  const fileContext = buildTaskContext(task, projectRoot, { traceImports: true });
-
-  // Include learnings from previous tasks
-  const learnings = await buildLearningsContext(outputDir);
-
-  const findingsSection = findingsFromDeps
-    ? `\n## Findings from Exploration Tasks\nThe following issues were discovered by previous exploration tasks. Address all relevant findings:\n\n${findingsFromDeps}\n`
-    : "";
-
-  const prompt = `## Implementation Plan
-${JSON.stringify(convergedPlan, null, 2)}
-${learnings ? `\n${learnings}\n` : ""}${findingsSection}
-## Current Source Files (for reference)
-${fileContext}
-
-## Instructions
-Execute this implementation plan step by step. Create and modify all files as specified. Write all tests. Follow the plan precisely.`;
-
-  log.info("Calling claude to implement...");
-
-  const response = await callClaude({
-    prompt,
-    systemPrompt: EXECUTION_SYSTEM_PROMPT,
-    model: config.models.executor,
-    maxBudgetUsd: config.budget.execution_max_usd,
-    dangerouslySkipPermissions: true,
-    logFile: `${taskDir}/execution.log`,
-  });
-
-  await Bun.write(`${taskDir}/execution.json`, JSON.stringify(response, null, 2));
-
-  const cost = response.total_cost_usd ?? 0;
-  await recordCost(`task-${taskId}-execution`, cost);
-
-  if (response.is_error) {
-    log.error("Implementation reported error");
-    return false;
-  }
-
-  log.ok(`Implementation completed ($${cost.toFixed(2)})`);
-  return true;
-}
-
-export async function runPhaseBRetry(
-  taskId: string,
-  task: Task,
-  retryNum: number,
-  config: Config,
-  projectRoot: string,
-  outputDir: string,
-): Promise<boolean> {
-  const taskDir = `${outputDir}/logs/task-${taskId}`;
-
-  log.warn(`Phase B retry ${retryNum}: Fixing verification failures for '${task.title}'`);
-
-  // Read verification failure output
-  const verifyLogPath = `${taskDir}/verify.log`;
-  const verifyOutput = existsSync(verifyLogPath)
-    ? readFileSync(verifyLogPath, "utf-8")
-    : "No verification output available";
-
-  // Get converged plan
-  const synthesisPath = `${taskDir}/synthesis.json`;
-  const synthesisResponse = JSON.parse(readFileSync(synthesisPath, "utf-8"));
-  const convergedPlan = synthesisResponse.structured_output;
-
-  const fileContext = buildTaskContext(task, projectRoot);
-
-  const prompt = `## Original Implementation Plan
-${JSON.stringify(convergedPlan, null, 2)}
-
-## Verification Failure Output
-${verifyOutput}
-
-## Current Source Files
-${fileContext}
-
-## Instructions
-Fix the verification failures shown above. Only change what is necessary to make lint, typecheck, and tests pass.`;
-
-  log.info(`Calling claude to fix issues (retry ${retryNum})...`);
-
-  const response = await callClaude({
-    prompt,
-    systemPrompt: FIX_SYSTEM_PROMPT,
-    model: config.models.executor,
-    maxBudgetUsd: config.budget.execution_max_usd,
-    dangerouslySkipPermissions: true,
-    logFile: `${taskDir}/execution-retry-${retryNum}.log`,
-  });
-
-  await Bun.write(
-    `${taskDir}/execution-retry-${retryNum}.json`,
-    JSON.stringify(response, null, 2),
-  );
-
-  const cost = response.total_cost_usd ?? 0;
-  await recordCost(`task-${taskId}-retry-${retryNum}`, cost);
-
-  if (response.is_error) {
-    log.error(`Fix attempt ${retryNum} reported error`);
-    return false;
-  }
-
-  log.ok(`Fix attempt ${retryNum} completed ($${cost.toFixed(2)})`);
-  return true;
-}
 
 export async function runPhaseBRetryWithReview(
   taskId: string,
@@ -239,6 +82,7 @@ Fix the issues identified in the code review. The implementation already passes 
     maxBudgetUsd: config.budget.execution_max_usd,
     dangerouslySkipPermissions: true,
     logFile: `${taskDir}/review-fix-${retryNum}.log`,
+    cwd: projectRoot,
   });
 
   await Bun.write(
@@ -314,6 +158,7 @@ The findings file should include:
     dangerouslySkipPermissions: true,
     logFile: `${taskDir}/execution.log`,
     timeoutMs,
+    cwd: projectRoot,
   });
 
   await Bun.write(`${taskDir}/execution.json`, JSON.stringify(response, null, 2));
@@ -388,6 +233,7 @@ Execute the commands described above. Verify each command succeeds before procee
     dangerouslySkipPermissions: true,
     logFile: `${taskDir}/execution.log`,
     timeoutMs,
+    cwd: projectRoot,
   });
 
   await Bun.write(`${taskDir}/execution.json`, JSON.stringify(response, null, 2));

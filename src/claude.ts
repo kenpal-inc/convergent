@@ -118,6 +118,7 @@ async function callClaudeOnce(
     stdout: "pipe",
     stderr: "pipe",
     env: cleanEnv,
+    cwd: options.cwd,
   });
   log.debug(`Spawned claude pid=${proc.pid}`);
 

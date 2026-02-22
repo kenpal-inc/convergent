@@ -3,26 +3,27 @@
 export interface Config {
   models: {
     planner: string;
-    persona: string;
-    synthesizer: string;
     executor: string;
   };
   budget: {
     total_max_usd: number;
     per_task_max_usd: number;
-    per_persona_max_usd: number;
-    synthesis_max_usd: number;
+    plan_max_usd: number;
     execution_max_usd: number;
     review_max_usd: number;
     per_review_persona_max_usd: number;
   };
   parallelism: {
-    persona_timeout_seconds: number;
-    max_parallel_tasks?: number;
+    tournament_timeout_seconds: number;
     explore_timeout_seconds?: number;
     command_timeout_seconds?: number;
   };
+  tournament: {
+    competitors: number;
+    strategies: string[];
+  };
   verification: {
+    auto_detect: boolean;
     commands: string[];
     max_retries: number;
     timeout_seconds?: number;
@@ -32,11 +33,6 @@ export interface Config {
     enabled: boolean;
     max_retries: number;
     personas: string[];
-  };
-  personas: {
-    trivial: string[];
-    standard: string[];
-    complex: string[];
   };
   git: {
     auto_commit: boolean;
@@ -76,23 +72,24 @@ export type TaskStatusValue =
   | "failed"
   | "blocked";
 
-export type TaskPhase = "A" | "B" | "verify" | "review" | "commit";
+export type TaskPhase = "T" | "B" | "verify" | "review" | "commit";
 
-export interface ConvergenceMetrics {
-  persona_count: number;
-  successful_count: number;
-  file_consensus: number;
-  synthesis_mode: "converged" | "single_plan_fallback" | "direct_plan";
-  convergent_decisions_count: number;
-  divergences_resolved_count: number;
-  unique_insights_count: number;
+export interface TournamentMetrics {
+  competitors_count: number;
+  implementations_succeeded: number;
+  verifications_passed: number;
+  winner_strategy: string;
+  winner_score: number;
+  score_spread: number;
+  convergence_ratio?: number; // 0-1: how similar successful implementations are
+  diff_lines_winner?: number; // lines changed by winner (fewer = cleaner)
 }
 
 export interface TaskStatus {
   status: TaskStatusValue;
   phase?: TaskPhase;
   completed_at?: string;
-  convergence_metrics?: ConvergenceMetrics;
+  tournament_metrics?: TournamentMetrics;
 }
 
 export interface State {
@@ -119,15 +116,50 @@ export interface Budget {
   total_usd: number;
 }
 
-// --- Persona ---
+// --- Competitor (tournament) ---
 
-export interface Persona {
+export interface Competitor {
   name: string;
   system_prompt: string;
-  exploration_guidance?: string;
 }
 
-export type PersonaMap = Record<string, Persona>;
+export type CompetitorMap = Record<string, Competitor>;
+
+// --- Review Persona ---
+
+export interface ReviewPersona {
+  name: string;
+  system_prompt: string;
+}
+
+export type ReviewPersonaMap = Record<string, ReviewPersona>;
+
+// --- Tournament Result ---
+
+export interface CompetitorResult {
+  id: number;
+  strategy: string;
+  implementationOk: boolean;
+  verificationScore: number;
+  verificationDetails: { name: string; passed: boolean; weight: number }[];
+  cost: number;
+}
+
+export interface ConvergenceAnalysis {
+  convergence_ratio: number; // 0-1: proportion of files changed by all successful competitors
+  common_files: string[]; // files changed by every successful competitor
+  divergent_files: string[]; // files changed by only some competitors
+  diff_lines: Record<number, number>; // competitor id → diff line count
+}
+
+export interface TournamentResult {
+  winnerId: number;
+  winnerStrategy: string;
+  competitors: CompetitorResult[];
+  convergenceAnalysis?: ConvergenceAnalysis;
+  judgeRationale?: string; // AI judge's explanation for the selection
+  totalCost: number;
+}
 
 // --- Claude CLI Response ---
 
@@ -140,30 +172,7 @@ export interface ClaudeResponse {
   structured_output?: unknown;
 }
 
-// --- Plan Output (individual persona) ---
-
-export interface PlanFile {
-  path: string;
-  action: "create" | "modify" | "delete";
-  description: string;
-  key_changes?: string[];
-}
-
-export interface PlanTestCase {
-  description: string;
-  file?: string;
-  type?: "unit" | "integration" | "e2e";
-}
-
-export interface PlanOutput {
-  approach_summary: string;
-  files: PlanFile[];
-  new_dependencies?: string[];
-  test_cases: PlanTestCase[];
-  risks?: string[];
-}
-
-// --- Converged Plan (synthesis output) ---
+// --- Plan Output ---
 
 export interface ResolvedDivergence {
   topic: string;
@@ -242,6 +251,7 @@ export interface ClaudeCallOptions {
   dangerouslySkipPermissions?: boolean;
   timeoutMs?: number;
   logFile?: string;
+  cwd?: string;
 }
 
 // --- CLI Args ---
