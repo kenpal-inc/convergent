@@ -27,7 +27,7 @@ import { generateTaskReport, generateSummaryReport } from "./src/reports";
 import { recordReviewLearning, recordFailureLearning } from "./src/learnings";
 import type { CliArgs, Config, Task, TaskQueue, TournamentMetrics } from "./src/types";
 
-const VERSION = "2.3.0";
+const VERSION = "2.3.1";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const LIB_DIR = resolve(SCRIPT_DIR, "lib");
 const TEMPLATES_DIR = resolve(SCRIPT_DIR, "templates");

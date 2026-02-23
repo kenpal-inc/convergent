@@ -228,6 +228,10 @@ export async function removeWorktree(
   worktreePath: string,
 ): Promise<void> {
   await run(["worktree", "remove", worktreePath, "--force"], projectRoot);
+  // Clean up stale core.worktree that git may have written to .git/config
+  // during `git worktree add --detach`. If left behind after removal,
+  // this poisoned path breaks ALL subsequent git commands.
+  await run(["config", "--unset", "core.worktree"], projectRoot);
 }
 
 export async function getWorktreeDiff(worktreePath: string): Promise<string> {
