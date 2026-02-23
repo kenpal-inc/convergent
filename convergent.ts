@@ -27,7 +27,7 @@ import { generateTaskReport, generateSummaryReport } from "./src/reports";
 import { recordReviewLearning, recordFailureLearning } from "./src/learnings";
 import type { CliArgs, Config, Task, TaskQueue, TournamentMetrics } from "./src/types";
 
-const VERSION = "2.2.0";
+const VERSION = "2.3.0";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const LIB_DIR = resolve(SCRIPT_DIR, "lib");
 const TEMPLATES_DIR = resolve(SCRIPT_DIR, "templates");
@@ -375,7 +375,9 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => void cleanup());
   process.on("SIGTERM", () => void cleanup());
 
-  // Ensure .convergent/ is gitignored to prevent it leaking into commits/worktrees
+  // Ensure .convergent/ is gitignored to prevent it leaking into commits/worktrees.
+  // For greenfield projects (no .gitignore exists), also include common defaults
+  // to prevent node_modules, build artifacts, etc. from being committed.
   const gitignorePath = resolve(projectRoot, ".gitignore");
   const convergentIgnoreEntry = ".convergent/";
   if (existsSync(gitignorePath)) {
@@ -385,8 +387,37 @@ async function main(): Promise<void> {
       log.debug("Added .convergent/ to .gitignore");
     }
   } else {
-    await Bun.write(gitignorePath, convergentIgnoreEntry + "\n");
-    log.debug("Created .gitignore with .convergent/");
+    const defaultGitignore = [
+      "# Dependencies",
+      "node_modules/",
+      "",
+      "# Build outputs",
+      "dist/",
+      "build/",
+      ".next/",
+      "out/",
+      "",
+      "# Environment",
+      ".env",
+      ".env.local",
+      ".env*.local",
+      "",
+      "# IDE",
+      ".idea/",
+      ".vscode/",
+      "*.swp",
+      "*.swo",
+      "",
+      "# OS",
+      ".DS_Store",
+      "Thumbs.db",
+      "",
+      "# Convergent",
+      ".convergent/",
+      "",
+    ].join("\n");
+    await Bun.write(gitignorePath, defaultGitignore);
+    log.info("Created .gitignore with common defaults (greenfield project detected)");
   }
 
   // Initialize modules

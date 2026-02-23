@@ -92,6 +92,28 @@ export async function createBranch(
   }
 }
 
+/**
+ * Detect if a commit message is actually a Claude CLI error rather than a real message.
+ * Prevents errors like "Prompt is too long" from being committed as-is.
+ */
+function looksLikeClaudeError(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  const errorPatterns = [
+    "prompt is too long",
+    "rate limit",
+    "overloaded",
+    "context window",
+    "max tokens",
+    "request timeout",
+    "exceeded",
+    "error:",
+    "failed to",
+    "process exited",
+    "empty response",
+  ];
+  return errorPatterns.some(p => lower.includes(p));
+}
+
 export async function gitCommitTask(
   taskId: string,
   taskTitle: string,
@@ -134,7 +156,7 @@ Write only the commit message, nothing else. Do not use conventional commit pref
   });
 
   let commitMsg = response.result?.trim();
-  if (!commitMsg) {
+  if (!commitMsg || response.is_error || looksLikeClaudeError(commitMsg)) {
     commitMsg = `implement: ${taskTitle}`;
   }
 

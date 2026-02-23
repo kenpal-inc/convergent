@@ -198,6 +198,7 @@ Respond with ONLY a JSON object (no markdown fences):
       systemPrompt: "You are an expert code reviewer judging competing implementations. Be decisive. Pick the best one.",
       model: config.models.planner,
       maxBudgetUsd: JUDGE_BUDGET_USD,
+      tools: "",
       logFile: `${taskDir}/judge.log`,
     });
 
@@ -725,6 +726,7 @@ Respond with JSON only:
       systemPrompt,
       model: config.models.planner,
       maxBudgetUsd: CONVERGENCE_ANALYSIS_BUDGET_USD,
+      tools: "",
       logFile: `${taskDir}/convergence-analysis.log`,
     });
 
