@@ -26,7 +26,7 @@ import { generateTaskReport, generateSummaryReport } from "./src/reports";
 import { recordReviewLearning, recordFailureLearning } from "./src/learnings";
 import type { CliArgs, Config, Task, TaskQueue, TournamentMetrics } from "./src/types";
 
-const VERSION = "1.0.0";
+const VERSION = "2.0.0";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const LIB_DIR = resolve(SCRIPT_DIR, "lib");
 const TEMPLATES_DIR = resolve(SCRIPT_DIR, "templates");
@@ -693,8 +693,17 @@ async function main(): Promise<void> {
       }
 
       // Phase R: Code Review on winner
+      // Use convergence signal to decide review strategy:
+      //   high convergence (>80%) + multiple competitors = skip review (independent agreement = high confidence)
+      //   single competitor or no convergence data = normal review
       let reviewApproved = true;
-      if (config.review?.enabled !== false) {
+      const convergenceRatio = tournamentResult.convergenceAnalysis?.convergence_ratio;
+      const multipleSucceeded = (tournamentResult.convergenceAnalysis !== undefined);
+      const highConvergence = multipleSucceeded && convergenceRatio !== undefined && convergenceRatio >= 0.8;
+
+      if (highConvergence) {
+        log.ok(`Skipping review — high convergence (${(convergenceRatio! * 100).toFixed(0)}%) + verification passed → independent agreement`);
+      } else if (config.review?.enabled !== false) {
         await updateTaskStatus(task.id, "in_progress", "review");
         const reviewMaxRetries = config.review?.max_retries ?? 2;
         let reviewAttempt = 0;

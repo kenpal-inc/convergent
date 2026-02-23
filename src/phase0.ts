@@ -76,7 +76,7 @@ Rules:
 - depends_on references other task IDs that must complete before this one
 - acceptance_criteria should be testable conditions (e.g., "function X returns correct output for input Y")
 - Task IDs must follow the pattern task-001, task-002, etc.
-- Aim for 3-15 tasks. Fewer is better if the goal is simple.
+- Aim for 5-7 tasks. Merge closely related changes into a single task rather than splitting them (e.g., "create utility + endpoint" is one task, not two). Each task should represent a meaningful, independently verifiable unit of work. Only exceed 7 tasks for genuinely large, multi-component features.
 
 Task types (set the "type" field for each task):
 - "code": Write or modify source code. This is the default for implementation tasks.
@@ -84,6 +84,8 @@ Task types (set the "type" field for each task):
 - "command": Execute a specific shell command (deploy, migrate, run a script, etc). Use when the task is primarily about running a command and verifying its success.
 
 Important: Choose the right type based on the task's PRIMARY activity. A task that tests a website to find bugs is "explore", not "code". A task that deploys code is "command", not "code". A task that fixes bugs found by a previous explore task is "code".
+
+Do NOT create a final "run all tests" or "verify everything works" command task. The orchestrator already runs verification (typecheck, lint, test, format) automatically after every code task. A redundant test-run task at the end wastes budget and time.
 
 Complexity classification:
 - trivial: Single file change, clear pattern to follow, under 50 lines changed

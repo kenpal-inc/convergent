@@ -172,34 +172,6 @@ export interface ClaudeResponse {
   structured_output?: unknown;
 }
 
-// --- Plan Output ---
-
-export interface ResolvedDivergence {
-  topic: string;
-  chosen_approach: string;
-  rationale: string;
-}
-
-export interface ImplementationStep {
-  order: number;
-  description: string;
-  file_path: string;
-  action: "create" | "modify" | "delete";
-  detailed_instructions: string;
-}
-
-export interface TestPlanEntry {
-  file_path: string;
-  test_cases: string[];
-}
-
-export interface ConvergedPlan {
-  convergent_decisions: string[];
-  resolved_divergences?: ResolvedDivergence[];
-  unique_insights_adopted?: string[];
-  implementation_steps: ImplementationStep[];
-  test_plan: TestPlanEntry[];
-}
 
 // --- Review Result (Phase C output) ---
 

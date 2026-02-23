@@ -405,7 +405,7 @@ export async function runTournament(
 
   // --- Convergence analysis ---
   const successfulIds = competitorResults
-    .filter(c => c.implementationOk && c.verificationScore > 0)
+    .filter(c => c.implementationOk)
     .map(c => c.id);
 
   let convergenceAnalysis: ConvergenceAnalysis | undefined;

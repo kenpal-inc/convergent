@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>convergent — Autonomous Development Orchestrator for Claude Code</title>
-  <meta name="description" content="Multiple AI personas independently design solutions, then converge on the optimal one. Autonomous development orchestrator for Claude Code.">
+  <meta name="description" content="Multiple competing implementations race in parallel git worktrees. Objective verification selects the fittest. Autonomous development orchestrator for Claude Code.">
 
   <!-- Open Graph -->
   <meta property="og:title" content="convergent — Autonomous Development Orchestrator">
-  <meta property="og:description" content="Multiple AI personas independently design solutions, then converge on the optimal one. For Claude Code.">
+  <meta property="og:description" content="Multiple competing implementations race in parallel. Objective verification selects the fittest. For Claude Code.">
   <meta property="og:url" content="https://kenpal-inc.github.io/convergent/">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
@@ -209,6 +209,56 @@
               <p><code>--review</code> to inspect task queue, <code>--dry-run</code> for plans only, <code>--refine</code> to adjust.</p>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================ When to Use ================================ -->
+    <section class="features" id="when-to-use">
+      <div class="container">
+        <h2 class="fade-in">When to Use</h2>
+        <p class="section-subtitle fade-in">Tournament-based development shines in specific scenarios.</p>
+
+        <div class="features-grid">
+          <div class="feature-item fade-in">
+            <div class="feature-icon">&#127919;</div>
+            <div>
+              <h3>Multiple Valid Approaches</h3>
+              <p>When requirements are ambiguous and design decisions matter. "Add real-time notifications" &mdash; WebSocket vs SSE vs polling? Let competitors explore different paths.</p>
+            </div>
+          </div>
+          <div class="feature-item fade-in">
+            <div class="feature-icon">&#128260;</div>
+            <div>
+              <h3>Large Refactoring</h3>
+              <p>Breaking changes with multiple migration strategies. Parallel worktrees let each approach run safely. The one that passes verification wins.</p>
+            </div>
+          </div>
+          <div class="feature-item fade-in">
+            <div class="feature-icon">&#9989;</div>
+            <div>
+              <h3>Well-Tested Codebases</h3>
+              <p>Existing test suites create strong selection pressure. Bad implementations are eliminated automatically by objective verification.</p>
+            </div>
+          </div>
+          <div class="feature-item fade-in">
+            <div class="feature-icon">&#127793;</div>
+            <div>
+              <h3>Greenfield Features</h3>
+              <p>New features in existing projects where competitors independently make architectural decisions. Convergence signals which choices are natural.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="output-tree fade-in" style="margin-top: 40px;">
+          <h3 style="margin-bottom: 16px;">Cost Profile (real-world benchmark)</h3>
+          <pre>Task: CSRF implementation on a Hono + React production codebase
+
+Tasks generated:    5-6
+Tournaments run:    4
+Total cost:         ~$25-35
+Wall clock time:    ~60 min
+Competitors/round:  1 (trivial) / 2 (standard) / 3 (complex)</pre>
         </div>
       </div>
     </section>

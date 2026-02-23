@@ -3,29 +3,28 @@ import { resolve, dirname } from "path";
 import { log } from "./logger";
 import { callClaude, getStructuredOutput } from "./claude";
 import { recordCost } from "./budget";
-import type { Config, ConvergedPlan, ReviewPersona, ReviewPersonaMap, ReviewCriterionCheck, ReviewIssue, ReviewResult, Task } from "./types";
+import type { Config, ReviewPersona, ReviewPersonaMap, ReviewCriterionCheck, ReviewIssue, ReviewResult, Task } from "./types";
 
 // Fallback system prompt for single-reviewer mode (when no review personas configured)
 const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer performing a semantic review of implementation changes.
 
 You have been given:
-1. The converged implementation plan that was supposed to be followed
-2. The acceptance criteria that define "done"
-3. The actual git diff showing what was implemented
-4. Verification results (lint/typecheck/test already passed)
+1. The task description and acceptance criteria that define "done"
+2. The actual git diff showing what was implemented
+3. Verification results (lint/typecheck/test already passed)
 
 Your job is to perform a SEMANTIC review - mechanical checks (lint, types, tests) have already passed. Focus on:
 
-1. PLAN COMPLIANCE: Does the diff implement what the plan specified? Are there missing steps? Extra steps not in the plan?
+1. TASK COMPLIANCE: Does the diff implement what the task requires? Are there missing pieces? Extra changes beyond the scope?
 2. ACCEPTANCE CRITERIA: Does each criterion appear to be satisfied by the changes?
 3. CODE QUALITY ISSUES: Look for:
-   - Unnecessary changes (files modified but not in the plan)
+   - Unnecessary changes (files modified beyond what the task requires)
    - Security problems (hardcoded secrets, SQL injection, XSS, missing input validation)
    - Missing error handling for critical paths
    - Broken patterns (inconsistency with surrounding codebase conventions)
    - Dead code or debug artifacts left behind
    - Overly broad changes that could cause regressions
-4. COMPLETENESS: Are all files from the plan accounted for in the diff?
+4. COMPLETENESS: Does the diff fully address the task description?
 
 Be practical. Minor style issues that passed linting are not worth flagging. Focus on issues that would matter in a real code review.
 
@@ -68,20 +67,6 @@ async function prepareReviewContext(
 ): Promise<{ context: ReviewContext; earlyReturn?: never } | { context?: never; earlyReturn: ReviewResult }> {
   const taskDir = `${outputDir}/logs/task-${taskId}`;
 
-  // Load converged plan
-  const synthesisPath = `${taskDir}/synthesis.json`;
-  if (!existsSync(synthesisPath)) {
-    log.error(`No converged plan found for task ${taskId}`);
-    return { earlyReturn: makeErrorResult("No converged plan found - cannot review") };
-  }
-
-  const synthesisResponse = JSON.parse(readFileSync(synthesisPath, "utf-8"));
-  const convergedPlan: ConvergedPlan | null = synthesisResponse.structured_output ?? null;
-  if (!convergedPlan) {
-    log.error(`No structured_output in synthesis for task ${taskId}`);
-    return { earlyReturn: makeErrorResult("No structured plan in synthesis output") };
-  }
-
   // Get git diff (all changes since base commit, including any intermediate commits by review fix)
   const gitDiff = await getGitDiffUncommitted(projectRoot, baseCommit);
   const gitDiffStat = await getGitDiffStatUncommitted(projectRoot, baseCommit);
@@ -110,6 +95,11 @@ async function prepareReviewContext(
     .map((c, i) => `${i + 1}. ${c}`)
     .join("\n");
 
+  // Build context files text
+  const contextFiles = (task.context_files ?? [])
+    .map(f => `- ${f}`)
+    .join("\n");
+
   // Load review schema
   const reviewSchema = await Bun.file(`${templatesDir}/review_result.schema.json`).json();
 
@@ -124,11 +114,15 @@ async function prepareReviewContext(
 
   if (retryInfo) {
     // Differential review: focus on what changed since last review
-    prompt = `## Converged Implementation Plan
-${JSON.stringify(convergedPlan, null, 2)}
+    prompt = `## Task
+Title: ${task.title}
+Description: ${task.description}
 
 ## Acceptance Criteria
 ${acceptanceCriteria || "(none specified)"}
+
+## Expected Context Files
+${contextFiles || "(none specified)"}
 
 ## Previous Review Feedback (issues that were supposed to be fixed)
 ${retryInfo.previousFeedback}
@@ -147,14 +141,18 @@ This is a RE-REVIEW after the developer attempted to fix issues from the previou
 Focus on:
 1. Whether the previously identified issues have been properly fixed
 2. Whether the fixes introduced any new problems
-3. Whether the overall implementation still meets the plan and acceptance criteria
+3. Whether the overall implementation still meets the task requirements and acceptance criteria
 Approve if the previous issues are resolved and no new significant issues were introduced.`;
   } else {
-    prompt = `## Converged Implementation Plan
-${JSON.stringify(convergedPlan, null, 2)}
+    prompt = `## Task
+Title: ${task.title}
+Description: ${task.description}
 
 ## Acceptance Criteria
 ${acceptanceCriteria || "(none specified)"}
+
+## Expected Context Files
+${contextFiles || "(none specified)"}
 
 ## Git Diff Summary (--stat)
 ${gitDiffStat}
@@ -166,7 +164,7 @@ ${diffForReview}
 ${verifyLog}
 
 ## Instructions
-Review the git diff against the converged plan and acceptance criteria. Determine whether to approve or request changes.`;
+Review the git diff against the task description and acceptance criteria. Determine whether to approve or request changes.`;
   }
 
   return { context: { prompt, reviewSchema, diffSnapshot: gitDiff } };

@@ -226,7 +226,7 @@ Place a `convergent.config.json` in your project root to customize:
   "parallelism": {
     "tournament_timeout_seconds": 1800,
     "explore_timeout_seconds": 1200,
-    "command_timeout_seconds": 600
+    "command_timeout_seconds": 1200
   },
   "tournament": {
     "competitors": 3,
@@ -377,6 +377,42 @@ Verification commands (lint, typecheck, test) have a configurable timeout (defau
 - **Multi-persona review gate**: After verification, 3 specialist reviewers audit correctness, security, and maintainability in parallel (any rejection triggers a fix)
 - **Auto-revert**: Failed task changes are automatically rolled back
 - **Resumable**: State is saved on Ctrl+C, resume with `--resume`
+
+## When to Use (and When Not to)
+
+convergent's tournament-based approach shines in specific scenarios and is overkill in others.
+
+### Strong Use Cases
+
+| Scenario | Why It Works |
+|----------|-------------|
+| **Ambiguous requirements with multiple valid approaches** | Multiple implementations explore different design choices; the AI judge picks the best. Example: "Add real-time notifications" (WebSocket vs SSE vs polling) |
+| **Large refactoring with breaking changes** | Parallel worktrees let competitors try different migration strategies safely. The one that passes verification wins |
+| **Well-tested codebases** | Verification (typecheck, lint, test) acts as strong selection pressure — bad implementations are eliminated automatically |
+| **Greenfield features in existing projects** | Competitors independently make architectural decisions (schema design, API structure, state management). Convergence signals which choices are natural |
+
+### Weak Use Cases
+
+| Scenario | Why It Doesn't Help |
+|----------|-------------------|
+| **Clear spec with one obvious implementation path** | All competitors write nearly identical code — tournament overhead for no benefit |
+| **Projects with no tests** | No selection pressure means verification always passes — just expensive random selection |
+| **Visual/UI tweaks** | Correctness is subjective and can't be verified automatically |
+| **Single-file bug fixes** | Trivial tasks already skip the tournament (single competitor). Use Claude Code directly |
+
+### Cost Profile
+
+From real-world benchmarking (CSRF implementation on a Hono + React production codebase):
+
+| Metric | Value |
+|--------|-------|
+| Tasks generated | 5-6 |
+| Tournaments run | 4 |
+| Total cost | ~$25-35 |
+| Wall clock time | ~60 min |
+| Competitors per tournament | 1 (trivial) / 2 (standard) / 3 (complex) |
+
+Budget scales linearly with task count. The biggest cost lever is task decomposition granularity — convergent aims for 5-7 tasks by default, merging related changes into single tasks.
 
 ## Design Philosophy: No Interactive Intervention
 

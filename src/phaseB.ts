@@ -222,7 +222,7 @@ ${depsContext}
 ## Instructions
 Execute the commands described above. Verify each command succeeds before proceeding. Report results clearly.`;
 
-  const timeoutMs = (config.parallelism.command_timeout_seconds ?? 600) * 1000;
+  const timeoutMs = (config.parallelism.command_timeout_seconds ?? 1200) * 1000;
   log.info(`Calling claude to execute commands... (timeout: ${timeoutMs / 1000}s)`);
 
   const response = await callClaude({
