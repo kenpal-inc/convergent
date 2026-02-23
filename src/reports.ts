@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { callClaude } from './claude';
 import { getGitLog } from './git';
-import type { Config } from './types';
+import type { Config, TournamentMetrics } from './types';
 
 const MAX_DIFF_CHARS = 10_000;
 const REPORT_BUDGET_USD = 0.10;
@@ -108,6 +108,99 @@ Provide a concise 2-3 sentence summary of what was changed and why. Focus on the
 }
 
 /**
+ * Format synthesis metadata into a markdown section.
+ * Accepts either a TournamentResult (from tournament.json) with a `synthesis` field,
+ * or a tournament_metrics object with synthesis_* fields.
+ * Returns empty string if no synthesis data is present.
+ */
+export function formatSynthesisSection(tournamentData: any): string {
+  if (!tournamentData) return '';
+
+  // Handle TournamentResult (from tournament.json) — has `synthesis` field
+  const synthesis = tournamentData.synthesis;
+  // Handle TournamentMetrics — has `synthesis_attempted` field
+  const metrics = tournamentData as Partial<TournamentMetrics> | undefined;
+
+  // Determine if we have any synthesis data to display
+  const hasFullSynthesis = synthesis && typeof synthesis === 'object';
+  const hasMetricsSynthesis = metrics?.synthesis_attempted !== undefined;
+
+  if (!hasFullSynthesis && !hasMetricsSynthesis) return '';
+
+  const lines: string[] = [];
+  lines.push('## Convergence Synthesis');
+  lines.push('');
+
+  if (hasFullSynthesis) {
+    // Full synthesis data from tournament.json
+    const attempted = synthesis.attempted ?? false;
+    const succeeded = synthesis.succeeded ?? false;
+    const fellBack = synthesis.fell_back_to_winner ?? false;
+
+    if (!attempted) {
+      lines.push(`**Outcome**: Not attempted`);
+    } else if (succeeded) {
+      lines.push(`**Outcome**: ✓ Synthesis succeeded`);
+    } else if (fellBack) {
+      lines.push(`**Outcome**: ✗ Fell back to single winner`);
+    } else {
+      lines.push(`**Outcome**: Attempted`);
+    }
+
+    if (synthesis.rationale) {
+      lines.push(`**Rationale**: ${synthesis.rationale}`);
+    }
+    lines.push('');
+
+    // Convergent patterns from semantic_analysis
+    const patterns = synthesis.semantic_analysis?.convergent_patterns;
+    if (Array.isArray(patterns) && patterns.length > 0) {
+      lines.push('### Convergent Patterns');
+      lines.push('');
+      for (const p of patterns) {
+        const confidence = typeof p.confidence === 'number' ? ` (confidence: ${p.confidence.toFixed(2)})` : '';
+        const desc = typeof p === 'string' ? p : (p.pattern ?? String(p));
+        lines.push(`- ${desc}${confidence}`);
+      }
+      lines.push('');
+    }
+  } else if (hasMetricsSynthesis) {
+    // Metrics-only synthesis data
+    const attempted = metrics!.synthesis_attempted ?? false;
+    const succeeded = metrics!.synthesis_succeeded ?? false;
+    const fellBack = metrics!.synthesis_fell_back ?? false;
+
+    if (!attempted) {
+      lines.push(`**Outcome**: Not attempted`);
+    } else if (succeeded) {
+      lines.push(`**Outcome**: ✓ Synthesis succeeded`);
+    } else if (fellBack) {
+      lines.push(`**Outcome**: ✗ Fell back to single winner`);
+    } else {
+      lines.push(`**Outcome**: Attempted`);
+    }
+
+    if (metrics!.synthesis_rationale) {
+      lines.push(`**Rationale**: ${metrics!.synthesis_rationale}`);
+    }
+    lines.push('');
+
+    // Convergent patterns from metrics
+    const patterns = metrics!.synthesis_convergent_patterns;
+    if (Array.isArray(patterns) && patterns.length > 0) {
+      lines.push('### Convergent Patterns');
+      lines.push('');
+      for (const p of patterns) {
+        lines.push(`- ${p}`);
+      }
+      lines.push('');
+    }
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Format report as markdown
  */
 export function formatReportMarkdown(
@@ -115,13 +208,20 @@ export function formatReportMarkdown(
   taskTitle: string,
   diffStat: string,
   summary: string,
-  timestamp: string
+  timestamp: string,
+  extraSections?: string,
 ): string {
-  return `# Task Report: ${taskId}\n\n` +
+  let md = `# Task Report: ${taskId}\n\n` +
     `**Task:** ${taskTitle}\n` +
     `**Generated:** ${timestamp}\n\n` +
-    `## Changes Summary\n\n${summary}\n\n` +
-    `## Diff Statistics\n\n\`\`\`\n${diffStat}\n\`\`\`\n`;
+    `## Changes Summary\n\n${summary}\n\n`;
+
+  if (extraSections) {
+    md += extraSections + '\n';
+  }
+
+  md += `## Diff Statistics\n\n\`\`\`\n${diffStat}\n\`\`\`\n`;
+  return md;
 }
 
 /**
@@ -146,9 +246,21 @@ export async function generateTaskReport(
     // Generate AI summary
     const summary = await generateDiffSummary(diffContent, taskTitle, config);
 
+    // Try to read tournament.json for synthesis metadata
+    let extraSections = '';
+    try {
+      const tournamentPath = join(outputDir, 'logs', `task-${taskId}`, 'tournament.json');
+      if (existsSync(tournamentPath)) {
+        const tournamentData = JSON.parse(readFileSync(tournamentPath, 'utf-8'));
+        extraSections = formatSynthesisSection(tournamentData);
+      }
+    } catch {
+      // Non-fatal: skip synthesis section if tournament.json can't be read
+    }
+
     // Format and write report
     const timestamp = new Date().toISOString();
-    const markdown = formatReportMarkdown(taskId, taskTitle, diffStat, summary, timestamp);
+    const markdown = formatReportMarkdown(taskId, taskTitle, diffStat, summary, timestamp, extraSections || undefined);
     const reportPath = join(reportsDir, `${taskId}.md`);
     writeFileSync(reportPath, markdown, 'utf-8');
 
@@ -301,8 +413,38 @@ export async function generateSummaryReport(
       if (avgConvergence !== undefined) {
         summary += ` Average convergence: ${(avgConvergence * 100).toFixed(0)}%.`;
       }
+
+      // Add synthesis stats to the summary line
+      const synthAttempted = tasksWithMetrics.filter(t => t.metrics.synthesis_attempted === true);
+      if (synthAttempted.length > 0) {
+        const synthSucceeded = synthAttempted.filter(t => t.metrics.synthesis_succeeded === true);
+        summary += ` ${synthAttempted.length} synthesis attempts, ${synthSucceeded.length} succeeded.`;
+      }
+
       lines.push(summary);
       lines.push('');
+
+      // Synthesis Details subsection
+      const tasksWithSynthesis = tasksWithMetrics.filter(t => t.metrics.synthesis_attempted === true);
+      if (tasksWithSynthesis.length > 0) {
+        lines.push('### Convergence Synthesis Details');
+        lines.push('');
+        for (const { id, metrics: m } of tasksWithSynthesis) {
+          const outcome = m.synthesis_succeeded ? '✓ Synthesis succeeded' : (m.synthesis_fell_back ? '✗ Fell back to single winner' : 'Attempted');
+          lines.push(`**${id}**: ${outcome}`);
+          if (m.synthesis_rationale) {
+            lines.push(`- Rationale: ${m.synthesis_rationale}`);
+          }
+          const patterns = m.synthesis_convergent_patterns;
+          if (Array.isArray(patterns) && patterns.length > 0) {
+            lines.push('- Convergent patterns:');
+            for (const p of patterns) {
+              lines.push(`  - ${p}`);
+            }
+          }
+          lines.push('');
+        }
+      }
     }
 
     // 7. Git history (conditional)

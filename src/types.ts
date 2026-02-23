@@ -89,6 +89,12 @@ export interface TournamentMetrics {
   synthesis_attempted?: boolean;
   /** Whether convergence synthesis succeeded in this tournament. */
   synthesis_succeeded?: boolean;
+  /** Whether synthesis was attempted but fell back to single-winner selection. */
+  synthesis_fell_back?: boolean;
+  /** Why synthesis was/wasn't attempted, or why it fell back. */
+  synthesis_rationale?: string;
+  /** Convergent pattern descriptions identified by semantic analysis. */
+  synthesis_convergent_patterns?: string[];
 }
 
 export interface TaskStatus {

@@ -662,6 +662,9 @@ async function main(): Promise<void> {
         diff_lines_winner: ca?.diff_lines[tournamentResult.winnerId],
         synthesis_attempted: tournamentResult.synthesis?.attempted,
         synthesis_succeeded: tournamentResult.synthesis?.succeeded,
+        synthesis_fell_back: tournamentResult.synthesis?.fell_back_to_winner,
+        synthesis_rationale: tournamentResult.synthesis?.rationale,
+        synthesis_convergent_patterns: tournamentResult.synthesis?.semantic_analysis?.convergent_patterns?.map(p => p.pattern),
       };
       await recordTournamentMetrics(task.id, tournamentMetrics);
 

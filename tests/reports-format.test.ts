@@ -1,7 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { mkdirSync, rmSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { formatReportMarkdown, generateDiffSummary, generateTaskReport } from '../src/reports';
+import { writeFileSync } from 'fs';
+import { formatReportMarkdown, formatSynthesisSection, generateDiffSummary, generateTaskReport } from '../src/reports';
 
 // Mock the claude module
 const mockCallClaude = mock(() => Promise.resolve({
@@ -60,6 +61,30 @@ describe('formatReportMarkdown', () => {
   test('handles special characters in task title', () => {
     const result = formatReportMarkdown('004', 'Fix `bug` in **parser**', 'stats', 'summary', '2024-01-01T00:00:00.000Z');
     expect(result).toContain('Fix `bug` in **parser**');
+  });
+
+  test('with extraSections parameter includes the extra content between summary and diff stats', () => {
+    const extra = '## Convergence Synthesis\n\n**Outcome**: ✓ Synthesis succeeded\n';
+    const result = formatReportMarkdown('005', 'Test', 'stats', 'summary', '2024-01-01T00:00:00.000Z', extra);
+    // Extra sections should appear after Changes Summary and before Diff Statistics
+    const summaryIdx = result.indexOf('## Changes Summary');
+    const extraIdx = result.indexOf('## Convergence Synthesis');
+    const diffIdx = result.indexOf('## Diff Statistics');
+    expect(summaryIdx).toBeGreaterThanOrEqual(0);
+    expect(extraIdx).toBeGreaterThan(summaryIdx);
+    expect(diffIdx).toBeGreaterThan(extraIdx);
+    expect(result).toContain('✓ Synthesis succeeded');
+  });
+
+  test('without extraSections parameter (undefined) produces unchanged output — backward compatibility', () => {
+    const withoutExtra = formatReportMarkdown('006', 'Test', 'stats', 'summary', '2024-01-01T00:00:00.000Z');
+    const withUndefined = formatReportMarkdown('006', 'Test', 'stats', 'summary', '2024-01-01T00:00:00.000Z', undefined);
+    const withEmpty = formatReportMarkdown('006', 'Test', 'stats', 'summary', '2024-01-01T00:00:00.000Z', '');
+    // All three should produce the same output
+    expect(withoutExtra).toBe(withUndefined);
+    expect(withoutExtra).toBe(withEmpty);
+    // Should not have any extra content between summary and diff
+    expect(withoutExtra).toContain('## Changes Summary\n\nsummary\n\n## Diff Statistics');
   });
 });
 
@@ -186,5 +211,148 @@ describe('generateTaskReport', () => {
   test('returns true on successful report generation', async () => {
     const result = await generateTaskReport('005', 'Task', mockConfig, TEST_DIR, TEST_DIR);
     expect(result).toBe(true);
+  });
+
+  test('reads tournament.json and includes synthesis section when synthesis was attempted', async () => {
+    // Create tournament.json with synthesis data
+    const logsDir = join(TEST_DIR, 'logs', 'task-020');
+    mkdirSync(logsDir, { recursive: true });
+    const tournamentData = {
+      winnerId: 0,
+      winnerStrategy: 'synthesis',
+      competitors: [],
+      synthesis: {
+        attempted: true,
+        succeeded: true,
+        fell_back_to_winner: false,
+        rationale: 'Both implementations converged on middleware pattern',
+        semantic_analysis: {
+          convergent_patterns: [
+            { pattern: 'Middleware-based auth', competitors: [0, 1], confidence: 0.95 },
+            { pattern: 'Error boundary pattern', competitors: [0, 1], confidence: 0.85 },
+          ],
+          divergent_approaches: [],
+          synthesis_viable: true,
+          rationale: 'High convergence',
+        },
+      },
+      totalCost: 1.5,
+    };
+    writeFileSync(join(logsDir, 'tournament.json'), JSON.stringify(tournamentData), 'utf-8');
+
+    await generateTaskReport('020', 'Synth Task', mockConfig, TEST_DIR, TEST_DIR);
+    const content = readFileSync(join(TEST_DIR, 'reports', '020.md'), 'utf-8');
+    expect(content).toContain('## Convergence Synthesis');
+    expect(content).toContain('✓ Synthesis succeeded');
+    expect(content).toContain('Middleware-based auth');
+    expect(content).toContain('Error boundary pattern');
+  });
+
+  test('works normally when tournament.json does not exist (non-tournament tasks)', async () => {
+    // No tournament.json in logs
+    await generateTaskReport('021', 'Explore Task', mockConfig, TEST_DIR, TEST_DIR);
+    const content = readFileSync(join(TEST_DIR, 'reports', '021.md'), 'utf-8');
+    expect(content).toContain('# Task Report: 021');
+    expect(content).toContain('## Changes Summary');
+    expect(content).toContain('## Diff Statistics');
+    // Should NOT contain synthesis section
+    expect(content).not.toContain('## Convergence Synthesis');
+  });
+});
+
+describe('formatSynthesisSection', () => {
+  test('returns empty string when no synthesis data present (null input)', () => {
+    expect(formatSynthesisSection(null)).toBe('');
+    expect(formatSynthesisSection(undefined)).toBe('');
+  });
+
+  test('returns empty string when object has no synthesis fields', () => {
+    expect(formatSynthesisSection({})).toBe('');
+    expect(formatSynthesisSection({ competitors: [] })).toBe('');
+  });
+
+  test('returns markdown with convergent patterns when synthesis.semantic_analysis has patterns', () => {
+    const data = {
+      synthesis: {
+        attempted: true,
+        succeeded: true,
+        fell_back_to_winner: false,
+        rationale: 'High convergence',
+        semantic_analysis: {
+          convergent_patterns: [
+            { pattern: 'Both used middleware pattern', competitors: [0, 1], confidence: 0.95 },
+            { pattern: 'Both added error boundaries', competitors: [0, 1], confidence: 0.80 },
+          ],
+          divergent_approaches: [],
+          synthesis_viable: true,
+          rationale: 'Viable',
+        },
+      },
+    };
+    const result = formatSynthesisSection(data);
+    expect(result).toContain('## Convergence Synthesis');
+    expect(result).toContain('### Convergent Patterns');
+    expect(result).toContain('Both used middleware pattern');
+    expect(result).toContain('confidence: 0.95');
+    expect(result).toContain('Both added error boundaries');
+    expect(result).toContain('confidence: 0.80');
+  });
+
+  test('returns synthesis outcome (succeeded) and rationale', () => {
+    const data = {
+      synthesis: {
+        attempted: true,
+        succeeded: true,
+        fell_back_to_winner: false,
+        rationale: 'Merged best patterns from both implementations',
+      },
+    };
+    const result = formatSynthesisSection(data);
+    expect(result).toContain('✓ Synthesis succeeded');
+    expect(result).toContain('Merged best patterns from both implementations');
+  });
+
+  test('returns synthesis outcome (fell back) and rationale', () => {
+    const data = {
+      synthesis: {
+        attempted: true,
+        succeeded: false,
+        fell_back_to_winner: true,
+        rationale: 'Synthesis failed verification, score below best individual',
+      },
+    };
+    const result = formatSynthesisSection(data);
+    expect(result).toContain('✗ Fell back to single winner');
+    expect(result).toContain('Synthesis failed verification');
+  });
+
+  test('returns not attempted when synthesis was not attempted', () => {
+    const data = {
+      synthesis: {
+        attempted: false,
+        succeeded: false,
+        fell_back_to_winner: true,
+        rationale: 'Convergence ratio below threshold',
+      },
+    };
+    const result = formatSynthesisSection(data);
+    expect(result).toContain('Not attempted');
+    expect(result).toContain('Convergence ratio below threshold');
+  });
+
+  test('handles metrics-only synthesis data (TournamentMetrics format)', () => {
+    const metricsData = {
+      synthesis_attempted: true,
+      synthesis_succeeded: false,
+      synthesis_fell_back: true,
+      synthesis_rationale: 'Score below best individual',
+      synthesis_convergent_patterns: ['Pattern A', 'Pattern B'],
+    };
+    const result = formatSynthesisSection(metricsData);
+    expect(result).toContain('## Convergence Synthesis');
+    expect(result).toContain('✗ Fell back to single winner');
+    expect(result).toContain('Score below best individual');
+    expect(result).toContain('Pattern A');
+    expect(result).toContain('Pattern B');
   });
 });
