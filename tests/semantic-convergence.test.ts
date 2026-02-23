@@ -1,4 +1,8 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
+import { describe, it, expect, mock, beforeEach, beforeAll, afterAll } from 'bun:test';
+import { mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { initBudgetModule, initBudget } from '../src/budget';
 
 // Set up mocks BEFORE importing the function under test
 const mockCallClaude = mock(() => Promise.resolve({
@@ -9,18 +13,27 @@ const mockCallClaude = mock(() => Promise.resolve({
   total_cost_usd: 0.05,
 }));
 
-const mockRecordCost = mock(() => Promise.resolve());
-
 mock.module('../src/claude', () => ({
   callClaude: mockCallClaude,
 }));
 
-mock.module('../src/budget', () => ({
-  recordCost: mockRecordCost,
-}));
-
 // Import after mocks are registered
 import { analyzeSemanticConvergence } from '../src/tournament';
+
+// Budget test dir for real recordCost calls
+let budgetTestDir: string;
+
+beforeAll(() => {
+  budgetTestDir = join(tmpdir(), `semantic-conv-budget-${Date.now()}`);
+  mkdirSync(budgetTestDir, { recursive: true });
+  initBudgetModule(budgetTestDir);
+  initBudget();
+  writeFileSync(join(budgetTestDir, 'state.json'), JSON.stringify({ total_cost_usd: 0 }));
+});
+
+afterAll(() => {
+  try { rmSync(budgetTestDir, { recursive: true, force: true }); } catch { /* ignore */ }
+});
 
 // --- Shared fixtures ---
 
@@ -70,7 +83,10 @@ const validAIResponse = JSON.stringify(validAnalysis);
 describe('analyzeSemanticConvergence', () => {
   beforeEach(() => {
     mockCallClaude.mockReset();
-    mockRecordCost.mockReset();
+    // Re-init budget for clean state each test
+    initBudgetModule(budgetTestDir);
+    initBudget();
+    writeFileSync(join(budgetTestDir, 'state.json'), JSON.stringify({ total_cost_usd: 0 }));
     // Default: successful response with valid JSON
     mockCallClaude.mockImplementation(() => Promise.resolve({
       type: 'result',
@@ -79,7 +95,6 @@ describe('analyzeSemanticConvergence', () => {
       result: validAIResponse,
       total_cost_usd: 0.12,
     }));
-    mockRecordCost.mockImplementation(() => Promise.resolve());
   });
 
   it('returns parsed SemanticConvergenceAnalysis on valid AI response', async () => {
@@ -113,7 +128,10 @@ describe('analyzeSemanticConvergence', () => {
     expect(result.convergent_patterns).toEqual([]);
     expect(result.divergent_approaches).toEqual([]);
     // Cost should still be recorded even on is_error
-    expect(mockRecordCost).toHaveBeenCalledWith('task-test-001-convergence-analysis', 0.03);
+    const budget = JSON.parse(readFileSync(join(budgetTestDir, 'budget.json'), 'utf-8'));
+    const entry = budget.entries.find((e: any) => e.label === 'task-test-001-convergence-analysis');
+    expect(entry).toBeDefined();
+    expect(entry.cost_usd).toBeCloseTo(0.03, 4);
   });
 
   it('returns synthesis_viable=false when AI returns empty result', async () => {
@@ -177,8 +195,10 @@ describe('analyzeSemanticConvergence', () => {
       mockTask, mockCandidates, mockConfig, mockTaskDir, mockConvergence,
     );
 
-    expect(mockRecordCost).toHaveBeenCalledTimes(1);
-    expect(mockRecordCost).toHaveBeenCalledWith('task-test-001-convergence-analysis', 0.12);
+    const budget = JSON.parse(readFileSync(join(budgetTestDir, 'budget.json'), 'utf-8'));
+    const entries = budget.entries.filter((e: any) => e.label === 'task-test-001-convergence-analysis');
+    expect(entries).toHaveLength(1);
+    expect(entries[0].cost_usd).toBeCloseTo(0.12, 4);
   });
 
   it('passes correct logFile path to callClaude', async () => {
@@ -261,8 +281,9 @@ describe('analyzeSemanticConvergence', () => {
     expect(result.convergent_patterns).toEqual([]);
     expect(result.divergent_approaches).toEqual([]);
     expect(result.rationale).toContain('Network connection refused');
-    // recordCost should NOT be called since no response exists
-    expect(mockRecordCost).not.toHaveBeenCalled();
+    // recordCost should NOT be called since no response exists — budget should have 0 entries
+    const budget = JSON.parse(readFileSync(join(budgetTestDir, 'budget.json'), 'utf-8'));
+    expect(budget.entries).toHaveLength(0);
   });
 
   it('prompt includes common_files and divergent_files from ConvergenceAnalysis', async () => {

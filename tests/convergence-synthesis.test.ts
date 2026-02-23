@@ -1,8 +1,9 @@
 import { describe, it, expect, mock, beforeEach, beforeAll, afterAll } from 'bun:test';
-import { mkdirSync, writeFileSync, rmSync } from 'fs';
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import type { Task, Config, SemanticConvergenceAnalysis, ConvergenceAnalysis } from '../src/types';
+import { initBudgetModule, initBudget } from '../src/budget';
 
 // --- Mocks (set up BEFORE importing function under test) ---
 
@@ -15,8 +16,6 @@ const mockCallClaude = mock(() =>
     total_cost_usd: 1.5,
   }),
 );
-
-const mockRecordCost = mock(() => Promise.resolve());
 
 const mockCreateWorktree = mock(() => Promise.resolve(true));
 const mockGetWorktreeChangedFiles = mock(() => Promise.resolve(['file1.ts']));
@@ -35,10 +34,6 @@ const mockScoreVerification = mock(() =>
 
 mock.module('../src/claude', () => ({
   callClaude: mockCallClaude,
-}));
-
-mock.module('../src/budget', () => ({
-  recordCost: mockRecordCost,
 }));
 
 mock.module('../src/git', () => ({
@@ -125,8 +120,7 @@ describe('synthesizeImplementation', () => {
       result: 'Synthesis done',
       total_cost_usd: 1.5,
     });
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();
@@ -257,6 +251,11 @@ describe('synthesizeImplementation', () => {
   });
 
   it('records cost via recordCost with correct label even on AI failure', async () => {
+    // Re-init budget to get a clean slate
+    initBudgetModule(testOutputDir);
+    await initBudget();
+    writeFileSync(join(testOutputDir, 'state.json'), JSON.stringify({ total_cost_usd: 0 }));
+
     mockCallClaude.mockResolvedValue({
       type: 'result',
       subtype: 'error',
@@ -268,7 +267,11 @@ describe('synthesizeImplementation', () => {
       baseTask, baseCandidates, baseSemanticAnalysis,
       baseConfig, projectRoot, tournamentDir, taskDir, baseCommit,
     );
-    expect(mockRecordCost).toHaveBeenCalledWith('task-test-001-synthesis', 0.3);
+    // Verify cost was recorded to budget.json
+    const budget = JSON.parse(readFileSync(join(testOutputDir, 'budget.json'), 'utf-8'));
+    const synthEntry = budget.entries.find((e: any) => e.label === 'task-test-001-synthesis');
+    expect(synthEntry).toBeDefined();
+    expect(synthEntry.cost_usd).toBeCloseTo(0.3, 4);
   });
 
   it('prompt includes all candidate diffs, convergent patterns, and task description', async () => {
@@ -316,8 +319,7 @@ const baseConvergenceAnalysis: ConvergenceAnalysis = {
 describe('analyzeSemanticConvergence', () => {
   beforeEach(() => {
     mockCallClaude.mockReset();
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
   });
 
   it('returns synthesis_viable=false when callClaude returns is_error', async () => {
@@ -435,8 +437,7 @@ describe('synthesis score comparison', () => {
       result: 'Synthesis done',
       total_cost_usd: 1.5,
     });
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();
@@ -489,8 +490,7 @@ describe('SynthesisMetadata integration', () => {
     mockGetWorktreeDiff.mockReset();
     mockGetWorktreeDiff.mockResolvedValue('diff content');
     mockCallClaude.mockReset();
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();
@@ -538,6 +538,11 @@ beforeAll(() => {
   );
   testOutputDir = join(tmpdir(), `convergent-test-output-${Date.now()}`);
   mkdirSync(testOutputDir, { recursive: true });
+  // Initialize real budget module to avoid mock.module conflicts with budget-mutex tests
+  initBudgetModule(testOutputDir);
+  initBudget();
+  // Also write state.json for recordCost
+  writeFileSync(join(testOutputDir, 'state.json'), JSON.stringify({ total_cost_usd: 0 }));
 });
 
 afterAll(() => {
@@ -563,8 +568,7 @@ describe('runTournament integration — single competitor', () => {
       result: 'Implementation done',
       total_cost_usd: 1.0,
     });
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();
@@ -604,8 +608,7 @@ describe('runTournament integration — convergence below threshold', () => {
     mockCreateWorktree.mockResolvedValue(true);
     mockRemoveWorktree.mockReset();
     mockRemoveWorktree.mockResolvedValue(undefined);
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();
@@ -689,8 +692,7 @@ describe('runTournament integration — synthesis field present', () => {
     mockCreateWorktree.mockResolvedValue(true);
     mockRemoveWorktree.mockReset();
     mockRemoveWorktree.mockResolvedValue(undefined);
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();
@@ -781,8 +783,7 @@ describe('runTournament integration — all competitors fail', () => {
     mockCreateWorktree.mockResolvedValue(true);
     mockRemoveWorktree.mockReset();
     mockRemoveWorktree.mockResolvedValue(undefined);
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();
@@ -838,8 +839,7 @@ describe('runTournament integration — synthesis fails, falls back to judge', (
     mockCreateWorktree.mockResolvedValue(true);
     mockRemoveWorktree.mockReset();
     mockRemoveWorktree.mockResolvedValue(undefined);
-    mockRecordCost.mockReset();
-    mockRecordCost.mockResolvedValue(undefined);
+    // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
     mockScoreVerification.mockReset();

@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync, writeFileSync } from "fs";
 import { log } from "./logger";
 import type { Budget, Config } from "./types";
 
@@ -45,15 +45,15 @@ function statePath(): string {
   return `${outputDir}/state.json`;
 }
 
-async function readBudget(): Promise<Budget> {
+function readBudget(): Budget {
   if (!existsSync(budgetPath())) {
     return { entries: [], total_usd: 0 };
   }
-  return Bun.file(budgetPath()).json() as Promise<Budget>;
+  return JSON.parse(readFileSync(budgetPath(), "utf-8"));
 }
 
-async function writeBudget(budget: Budget): Promise<void> {
-  await Bun.write(budgetPath(), JSON.stringify(budget, null, 2));
+function writeBudget(budget: Budget): void {
+  writeFileSync(budgetPath(), JSON.stringify(budget, null, 2));
 }
 
 export function initBudgetModule(dir: string): void {
@@ -61,7 +61,7 @@ export function initBudgetModule(dir: string): void {
 }
 
 export async function initBudget(): Promise<void> {
-  await writeBudget({ entries: [], total_usd: 0 });
+  writeBudget({ entries: [], total_usd: 0 });
 }
 
 /**
@@ -71,27 +71,26 @@ export async function initBudget(): Promise<void> {
  */
 export async function recordCost(label: string, cost: number): Promise<void> {
   return budgetMutex.runExclusive(async () => {
-    const budget = await readBudget();
+    const budget = readBudget();
     budget.entries.push({
       label,
       cost_usd: cost,
       timestamp: new Date().toISOString(),
     });
     budget.total_usd += cost;
-    await writeBudget(budget);
+    writeBudget(budget);
 
     // Update state total as well
     if (existsSync(statePath())) {
-      const state = await Bun.file(statePath()).json();
+      const state = JSON.parse(readFileSync(statePath(), "utf-8"));
       state.total_cost_usd = (state.total_cost_usd || 0) + cost;
-      await Bun.write(statePath(), JSON.stringify(state, null, 2));
+      writeFileSync(statePath(), JSON.stringify(state, null, 2));
     }
   });
 }
 
 export async function getTotalCost(): Promise<number> {
-  const budget = await readBudget();
-  return budget.total_usd;
+  return readBudget().total_usd;
 }
 
 export async function checkBudgetAvailable(config: Config): Promise<boolean> {
