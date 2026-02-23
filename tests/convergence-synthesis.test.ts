@@ -774,3 +774,180 @@ describe('runTournament integration — synthesis field present', () => {
     expect(result!.synthesis!.semantic_analysis!.convergent_patterns.length).toBeGreaterThan(0);
   });
 });
+
+describe('runTournament integration — all competitors fail', () => {
+  beforeEach(() => {
+    mockCreateWorktree.mockReset();
+    mockCreateWorktree.mockResolvedValue(true);
+    mockRemoveWorktree.mockReset();
+    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+    mockResolveVerificationCommands.mockReset();
+    mockResolveVerificationCommands.mockReturnValue(['bun test']);
+    mockScoreVerification.mockReset();
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 80,
+      maxScore: 100,
+      allPassed: false,
+      details: [{ name: 'bun test', passed: true, weight: 1 }],
+    });
+    mockGetWorktreeChangedFiles.mockReset();
+    mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
+    mockGetWorktreeDiff.mockReset();
+    mockGetWorktreeDiff.mockResolvedValue('diff --git a/file1.ts\n+added');
+
+    // Both competitors return is_error: true
+    mockCallClaude.mockReset();
+    mockCallClaude.mockResolvedValue({
+      type: 'result',
+      subtype: 'error',
+      is_error: true,
+      result: 'API error: model overloaded',
+      total_cost_usd: 0.1,
+    });
+  });
+
+  it('returns null when all competitors fail, no synthesis attempted, worktrees cleaned up', async () => {
+    const standardTask: Task = {
+      ...baseTask,
+      estimated_complexity: 'standard',
+    };
+
+    const result = await runTournament(
+      'test-all-fail', standardTask, baseConfig, projectRoot,
+      testOutputDir, testLibDir, baseCommit,
+    );
+
+    // runTournament returns null when all competitors fail
+    expect(result).toBeNull();
+
+    // removeWorktree should have been called for cleanup (2 competitor worktrees)
+    expect(mockRemoveWorktree).toHaveBeenCalled();
+    expect(mockRemoveWorktree.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    // Only 2 callClaude calls should have been made (competitor implementations only)
+    // No synthesis-related calls (semantic analysis, synthesis, or judge)
+    expect(mockCallClaude).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('runTournament integration — synthesis fails, falls back to judge', () => {
+  beforeEach(() => {
+    mockCreateWorktree.mockReset();
+    mockCreateWorktree.mockResolvedValue(true);
+    mockRemoveWorktree.mockReset();
+    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+    mockResolveVerificationCommands.mockReset();
+    mockResolveVerificationCommands.mockReturnValue(['bun test']);
+    mockScoreVerification.mockReset();
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 80,
+      maxScore: 100,
+      allPassed: false,
+      details: [{ name: 'bun test', passed: true, weight: 1 }],
+    });
+
+    // Both competitors change the same files → high convergence
+    mockGetWorktreeChangedFiles.mockReset();
+    mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
+    mockGetWorktreeDiff.mockReset();
+    mockGetWorktreeDiff.mockResolvedValue('diff --git a/file1.ts\n+added');
+
+    // callClaude sequence:
+    // 1-2: competitor implementations (success)
+    // 3: semantic convergence analysis (synthesis_viable=true)
+    // 4: synthesis implementation (is_error=true → synthesis fails)
+    // 5: judge fallback
+    let callCount = 0;
+    mockCallClaude.mockReset();
+    mockCallClaude.mockImplementation(async () => {
+      callCount++;
+      if (callCount <= 2) {
+        // Competitor implementations succeed
+        return {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: 'Implementation done',
+          total_cost_usd: 1.0,
+        };
+      }
+      if (callCount === 3) {
+        // Semantic convergence analysis → synthesis_viable=true
+        return {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: JSON.stringify({
+            convergent_patterns: [{ pattern: 'Shared approach', competitors: [0, 1], confidence: 0.9 }],
+            divergent_approaches: [],
+            synthesis_viable: true,
+            rationale: 'High convergence',
+          }),
+          total_cost_usd: 0.3,
+        };
+      }
+      if (callCount === 4) {
+        // Synthesis implementation fails
+        return {
+          type: 'result',
+          subtype: 'error',
+          is_error: true,
+          result: 'Synthesis AI call crashed',
+          total_cost_usd: 0.5,
+        };
+      }
+      // callCount === 5: Judge fallback
+      return {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: JSON.stringify({ winner: 0, rationale: 'Better overall implementation' }),
+        total_cost_usd: 0.3,
+      };
+    });
+  });
+
+  it('falls back to judge when synthesis AI call fails, with correct synthesis metadata', async () => {
+    const standardTask: Task = {
+      ...baseTask,
+      estimated_complexity: 'standard',
+    };
+    const configWithLowThreshold = {
+      ...baseConfig,
+      tournament: { ...baseConfig.tournament, convergence_threshold: 0.5 },
+    } as Config;
+
+    const result = await runTournament(
+      'test-synth-fail', standardTask, configWithLowThreshold, projectRoot,
+      testOutputDir, testLibDir, baseCommit,
+    );
+
+    // Tournament should still return a valid result via judge fallback
+    expect(result).not.toBeNull();
+    expect(result!.competitors.length).toBeGreaterThanOrEqual(2);
+
+    // Winner should be from the original competitors (judge picked 0)
+    expect(result!.winnerId).toBe(0);
+
+    // Synthesis metadata should reflect attempted=true but failed
+    expect(result!.synthesis).toBeDefined();
+    expect(result!.synthesis!.attempted).toBe(true);
+    expect(result!.synthesis!.succeeded).toBe(false);
+    expect(result!.synthesis!.fell_back_to_winner).toBe(true);
+    expect(result!.synthesis!.rationale).toContain('failed');
+
+    // Semantic analysis should still be present (it succeeded before synthesis failed)
+    expect(result!.synthesis!.semantic_analysis).toBeDefined();
+    expect(result!.synthesis!.semantic_analysis!.synthesis_viable).toBe(true);
+
+    // The 5th callClaude call should be the judge fallback
+    expect(mockCallClaude).toHaveBeenCalledTimes(5);
+
+    // Judge rationale should be present
+    expect(result!.judgeRationale).toBe('Better overall implementation');
+  });
+});
