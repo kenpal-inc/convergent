@@ -1,7 +1,8 @@
 {
   "models": {
     "planner": "opus",
-    "executor": "opus"
+    "executor": "opus",
+    "judge": "sonnet"
   },
   "budget": {
     "total_max_usd": 75.00,

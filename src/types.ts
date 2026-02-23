@@ -4,6 +4,7 @@ export interface Config {
   models: {
     planner: string;
     executor: string;
+    judge: string;
   };
   budget: {
     total_max_usd: number;

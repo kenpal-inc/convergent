@@ -41,7 +41,7 @@
           "estimated_complexity": {
             "type": "string",
             "enum": ["trivial", "standard", "complex"],
-            "description": "trivial: 1 file, simple change. standard: 2-5 files. complex: 6+ files or architectural change."
+            "description": "trivial: scaffolding, boilerplate, config, or single-pattern tasks (even if many files). standard: moderate logic, CRUD, 2-5 files with clear conventions. complex: genuine architectural decisions or novel design patterns that benefit from competing approaches."
           }
         },
         "required": ["id", "title", "description", "depends_on", "context_files", "acceptance_criteria", "estimated_complexity"]

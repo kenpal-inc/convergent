@@ -196,7 +196,7 @@ Respond with ONLY a JSON object (no markdown fences):
     const response = await callClaude({
       prompt,
       systemPrompt: "You are an expert code reviewer judging competing implementations. Be decisive. Pick the best one.",
-      model: config.models.planner,
+      model: config.models.judge,
       maxBudgetUsd: JUDGE_BUDGET_USD,
       tools: "",
       logFile: `${taskDir}/judge.log`,

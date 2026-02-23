@@ -25,9 +25,10 @@ import { runVerification } from "./src/verify";
 import { gitCommitTask, gitRevertChanges, createBranch, createPullRequest, getHeadCommit } from "./src/git";
 import { generateTaskReport, generateSummaryReport } from "./src/reports";
 import { recordReviewLearning, recordFailureLearning } from "./src/learnings";
+import { runIntegrationCheck } from "./src/phaseF";
 import type { CliArgs, Config, Task, TaskQueue, TournamentMetrics } from "./src/types";
 
-const VERSION = "2.3.1";
+const VERSION = "2.4.0";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const LIB_DIR = resolve(SCRIPT_DIR, "lib");
 const TEMPLATES_DIR = resolve(SCRIPT_DIR, "templates");
@@ -910,6 +911,19 @@ async function main(): Promise<void> {
   }
 
   console.log(`\nLoop terminated: ${stoppedReason} after ${iteration} iteration(s)`);
+
+  // Phase F: Integration check — cross-task coherence verification + auto-repair
+  // Only run if at least one task completed and we're not in dry-run mode
+  if (!args.dryRun) {
+    const taskCounts = await countTasksByStatus();
+    if ((taskCounts.completed || 0) > 0) {
+      try {
+        await runIntegrationCheck(config, projectRoot, outputDir, taskQueue);
+      } catch (err) {
+        log.warn(`Phase F failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
 
   // Generate overall summary report
   try {

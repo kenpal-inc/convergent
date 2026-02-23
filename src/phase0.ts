@@ -87,10 +87,12 @@ Important: Choose the right type based on the task's PRIMARY activity. A task th
 
 Do NOT create a final "run all tests" or "verify everything works" command task. The orchestrator already runs verification (typecheck, lint, test, format) automatically after every code task. A redundant test-run task at the end wastes budget and time.
 
-Complexity classification:
-- trivial: Single file change, clear pattern to follow, under 50 lines changed
-- standard: 2-5 files affected, moderate logic, tests needed
-- complex: 6+ files, architectural decisions, new patterns or significant refactoring`;
+Complexity classification (determines how many parallel competing implementations will run — use lower complexity to save budget):
+- trivial: Scaffolding, boilerplate, config changes, or single-file edits with a clear pattern. Even if many files are generated, if the task is following a well-known template (e.g., "npm init + install deps + create config files"), it is trivial.
+- standard: Moderate logic across 2-5 files, CRUD operations, or tasks where the approach is mostly determined by existing patterns/conventions. Multiple valid approaches exist but differences would be minor.
+- complex: Significant architectural decisions, novel design patterns, or tasks where multiple fundamentally different approaches could be taken. Reserve this for tasks that genuinely benefit from exploring competing strategies.
+
+IMPORTANT: For greenfield projects, "project setup/initialization" is always trivial regardless of file count. "Add CRUD API routes" is standard. Only tasks requiring genuine design decisions (dashboard layout strategy, complex business logic, real-time features) should be complex.`;
 
 export async function generateTaskQueue(
   goal: string,

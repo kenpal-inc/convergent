@@ -150,7 +150,7 @@ ${untracked.stdout}
 
 Write only the commit message, nothing else. Do not use conventional commit prefixes like feat: or fix: unless it clearly fits. Write a message that helps someone understand the change when reading git log.`,
     systemPrompt: "You are a helpful assistant that generates git commit messages. Output only the commit message text, nothing else.",
-    model: config.models.planner,
+    model: config.models.judge,
     maxBudgetUsd: 0.10,
     tools: "",
   });
