@@ -18,6 +18,7 @@ import type {
   CompetitorResult,
   ConvergenceAnalysis,
   SemanticConvergenceAnalysis,
+  SynthesisResult,
   TournamentResult,
   Task,
 } from "./types";
@@ -651,5 +652,212 @@ Respond with JSON only:
   } catch (err: any) {
     log.warn(`Semantic convergence analysis failed: ${err?.message ?? err}`);
     return { ...fallback, rationale: `Analysis error: ${err?.message ?? 'unknown error'}` };
+  }
+}
+
+/**
+ * Build the prompt for convergence synthesis.
+ * Extracted as a helper for testability and readability.
+ */
+function buildSynthesisPrompt(
+  task: Task,
+  candidates: { id: number; strategy: string; diff: string }[],
+  semanticAnalysis: SemanticConvergenceAnalysis,
+): string {
+  // Task section
+  const taskSection = [
+    `## Task: ${task.title}`,
+    '',
+    task.description,
+    '',
+    '### Acceptance Criteria',
+    ...(task.acceptance_criteria ?? []).map((c: string) => `- ${c}`),
+  ].join('\n');
+
+  // Candidate diffs section
+  const diffsSection = candidates
+    .map((c) => {
+      const truncated = c.diff.length > MAX_DIFF_LENGTH
+        ? c.diff.slice(0, MAX_DIFF_LENGTH) + '\n... [truncated]'
+        : c.diff;
+      return `### Competitor ${c.id} (${c.strategy})\n\n\`\`\`diff\n${truncated}\n\`\`\``;
+    })
+    .join('\n\n');
+
+  // Convergent patterns section (cap at 20 to bound prompt size)
+  const patternsSection = semanticAnalysis.convergent_patterns
+    .slice(0, 20)
+    .map(
+      (p) =>
+        `- [confidence: ${p.confidence.toFixed(2)}] ${p.pattern} (competitors: ${p.competitors.join(', ')})`,
+    )
+    .join('\n');
+
+  // Divergent approaches section
+  const divergentSection = (semanticAnalysis.divergent_approaches ?? [])
+    .map((d) => `- ${d}`)
+    .join('\n');
+
+  return [
+    '# Convergence Synthesis Task',
+    '',
+    'You are creating a SYNTHESIZED implementation that takes the best expression of each convergent design decision from multiple independent implementations that all passed verification.',
+    '',
+    taskSection,
+    '',
+    '## Passing Implementations',
+    '',
+    `${candidates.length} independent implementations passed verification. Their diffs are shown below:`,
+    '',
+    diffsSection,
+    '',
+    '## Convergent Patterns (shared design decisions)',
+    '',
+    'These patterns were independently chosen by multiple implementations, indicating high-confidence design decisions:',
+    '',
+    patternsSection,
+    '',
+    divergentSection
+      ? `## Divergent Approaches\n\nThese areas had different approaches across implementations. Choose the approach that best satisfies the acceptance criteria:\n\n${divergentSection}`
+      : '',
+    '',
+    '## Instructions',
+    '',
+    '1. Read the existing codebase files relevant to this task.',
+    '2. Implement a synthesis that embodies ALL convergent patterns listed above.',
+    '3. For divergent approaches, choose the approach that best satisfies the acceptance criteria and produces the cleanest code.',
+    '4. Do NOT blindly merge diffs — understand the intent behind each pattern and implement the best version.',
+    '5. Ensure ALL acceptance criteria are satisfied.',
+    '6. Write clean, well-tested code with proper error handling and edge cases.',
+  ].join('\n');
+}
+
+/**
+ * Synthesize the best parts of multiple tournament implementations into a single
+ * optimal implementation, guided by semantic convergence analysis.
+ *
+ * Never throws — returns SynthesisResult with success=false on any failure.
+ */
+export async function synthesizeImplementation(
+  task: Task,
+  candidates: { id: number; strategy: string; diff: string }[],
+  semanticAnalysis: SemanticConvergenceAnalysis,
+  config: Config,
+  projectRoot: string,
+  tournamentDir: string,
+  taskDir: string,
+  baseCommit: string,
+): Promise<SynthesisResult> {
+  let synthPath: string | undefined;
+  let cost = 0;
+
+  const failResult = (
+    rationale: string,
+    opts?: { worktreePath?: string; cost?: number },
+  ): SynthesisResult => ({
+    success: false,
+    diff: '',
+    verification_score: 0,
+    rationale,
+    patterns_incorporated: [],
+    worktreePath: opts?.worktreePath,
+    cost: opts?.cost ?? 0,
+  });
+
+  try {
+    // Step 1: Create synthesis worktree
+    synthPath = join(tournamentDir, 'synthesis');
+    log.info(`  Creating synthesis worktree at ${synthPath}`);
+    const wtOk = await createWorktree(projectRoot, synthPath, baseCommit);
+    if (!wtOk) {
+      return failResult('Failed to create synthesis worktree');
+    }
+
+    // Step 2: Build synthesis prompt
+    const prompt = buildSynthesisPrompt(task, candidates, semanticAnalysis);
+
+    // Step 3: Call Claude with full tool access in synthesis worktree
+    log.info(`  Starting synthesis AI call (budget: $${config.budget.execution_max_usd})`);
+    const response = await callClaude({
+      prompt,
+      systemPrompt:
+        'You are an expert software developer creating a synthesized implementation from the best design decisions of multiple independent implementations. Read the existing codebase, understand the convergent patterns identified, and implement the optimal synthesis. Focus on correctness, edge cases, and clean integration.',
+      model: config.models.executor,
+      maxBudgetUsd: config.budget.execution_max_usd,
+      tools: 'Read,Write,Edit,Glob,Grep,Bash',
+      dangerouslySkipPermissions: true,
+      timeoutMs: config.parallelism.tournament_timeout_seconds * 1000,
+      logFile: `${taskDir}/synthesis.log`,
+      cwd: synthPath,
+    });
+
+    // Step 4: Record cost
+    cost = response.total_cost_usd ?? 0;
+    await recordCost(`task-${task.id}-synthesis`, cost);
+    log.info(`  Synthesis AI call completed (cost: $${cost.toFixed(2)})`);
+
+    // Step 5: Check for AI errors
+    if (response.is_error) {
+      log.warn(`  Synthesis AI call failed: ${response.result?.slice(0, 200)}`);
+      return failResult(
+        `Synthesis AI call failed: ${response.result ?? 'unknown error'}`,
+        { worktreePath: synthPath, cost },
+      );
+    }
+
+    // Step 6: Check for file changes
+    const changedFiles = await getWorktreeChangedFiles(synthPath);
+    if (changedFiles.length === 0) {
+      log.warn('  Synthesis produced no file changes');
+      return failResult('Synthesis produced no file changes', {
+        worktreePath: synthPath,
+        cost,
+      });
+    }
+
+    // Step 7: Run verification
+    const verifyCommands = resolveVerificationCommands(config, projectRoot);
+    const score = await scoreVerification(verifyCommands, synthPath);
+    log.info(
+      `  Synthesis verification score: ${score.totalScore}/${score.maxScore}`,
+    );
+
+    // Step 8: Get diff
+    const diff = await getWorktreeDiff(synthPath);
+
+    // Step 9: Build patterns_incorporated
+    const patterns_incorporated = semanticAnalysis.convergent_patterns.map(
+      (p) => p.pattern,
+    );
+
+    // Step 10: Determine success and return
+    const success = score.totalScore > 0 || verifyCommands.length === 0;
+
+    if (success) {
+      log.ok(
+        `  Synthesis succeeded: ${changedFiles.length} files changed, score ${score.totalScore}/${score.maxScore}, ${patterns_incorporated.length} patterns incorporated`,
+      );
+    } else {
+      log.warn(
+        `  Synthesis failed verification: score ${score.totalScore}/${score.maxScore}`,
+      );
+    }
+
+    return {
+      success,
+      diff,
+      verification_score: score.totalScore,
+      rationale: `Synthesis from ${candidates.length} implementations incorporating ${patterns_incorporated.length} convergent patterns. Score: ${score.totalScore}/${score.maxScore}`,
+      patterns_incorporated,
+      worktreePath: synthPath,
+      cost,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    log.warn(`  Synthesis failed with error: ${message}`);
+    return failResult(`Synthesis failed: ${message}`, {
+      worktreePath: synthPath,
+      cost,
+    });
   }
 }
