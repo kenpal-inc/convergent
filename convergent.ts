@@ -4,6 +4,7 @@
  * convergent: Autonomous development orchestrator using convergent evolution
  *
  * Usage:
+ *   convergent "implement feature X"
  *   convergent --context "docs/ src/" --goal "implement feature X"
  *   convergent --resume
  *   convergent --context "." --goal "fix type errors" --review
@@ -26,7 +27,7 @@ import { generateTaskReport, generateSummaryReport } from "./src/reports";
 import { recordReviewLearning, recordFailureLearning } from "./src/learnings";
 import type { CliArgs, Config, Task, TaskQueue, TournamentMetrics } from "./src/types";
 
-const VERSION = "2.0.0";
+const VERSION = "2.2.0";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const LIB_DIR = resolve(SCRIPT_DIR, "lib");
 const TEMPLATES_DIR = resolve(SCRIPT_DIR, "templates");
@@ -35,14 +36,15 @@ function showHelp(): void {
   console.log(`convergent - Autonomous development orchestrator using convergent evolution
 
 USAGE:
+  convergent "<instructions>"                      [simplest form]
   convergent --context <paths> --goal <text> [options]
   convergent --instructions <text> [options]
   convergent --instructions-file <path> [options]
   convergent --resume [options]
 
-REQUIRED (unless --resume / --instructions):
-  --context <paths>     Comma-separated files/directories for Claude to analyze (default: "." if --instructions used)
-  --goal <text>         What to achieve (auto-derived from --instructions if omitted)
+REQUIRED (unless --resume / --refine / --instructions / bare text):
+  --context <paths>     Comma-separated files/directories for Claude to analyze (default: "." if instructions provided)
+  --goal <text>         What to achieve (auto-derived from instructions if omitted)
 
 OPTIONS:
   --instructions <text>       Specific instructions for task generation (natural language)
@@ -60,6 +62,9 @@ OPTIONS:
   --help                Show this help
 
 EXAMPLES:
+  # Simplest form — just describe what you want
+  convergent "Switch auth from JWT to session-based. Add a role field to the user model"
+
   convergent \\
     --context "docs/,src/,memo/remaining-tasks.md" \\
     --goal "Implement all remaining tasks"
@@ -165,7 +170,12 @@ function parseArgs(argv: string[]): CliArgs {
         showHelp();
         process.exit(0);
       default:
-        die(`Unknown option: ${arg} (use --help for usage)`);
+        if (arg.startsWith("-")) {
+          die(`Unknown option: ${arg} (use --help for usage)`);
+        }
+        // Bare text argument → treat as --instructions
+        args.instructions = arg;
+        break;
     }
     i++;
   }
