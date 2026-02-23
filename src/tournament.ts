@@ -17,12 +17,15 @@ import type {
   CompetitorMap,
   CompetitorResult,
   ConvergenceAnalysis,
+  SemanticConvergenceAnalysis,
   TournamentResult,
   Task,
 } from "./types";
 
 const STAGGER_MS = 2_000;
 const JUDGE_BUDGET_USD = 0.50;
+const CONVERGENCE_ANALYSIS_BUDGET_USD = 0.50;
+const MAX_DIFF_LENGTH = 30_000;
 
 /**
  * Determine how many competitors to run based on task complexity.
@@ -518,4 +521,135 @@ export async function runTournament(
   );
 
   return tournamentResult;
+}
+
+/**
+ * AI-driven semantic analysis of convergence across tournament implementations.
+ * Identifies convergent design decisions, divergent approaches, and assesses
+ * whether synthesizing the best parts of multiple implementations is feasible.
+ *
+ * Gracefully handles all errors — never throws. Returns a fallback with
+ * synthesis_viable=false on any failure.
+ */
+export async function analyzeSemanticConvergence(
+  task: Task,
+  candidates: { id: number; strategy: string; diff: string }[],
+  config: Config,
+  taskDir: string,
+  convergenceAnalysis: ConvergenceAnalysis,
+): Promise<SemanticConvergenceAnalysis> {
+  const fallback: SemanticConvergenceAnalysis = {
+    convergent_patterns: [],
+    divergent_approaches: [],
+    synthesis_viable: false,
+    rationale: '',
+  };
+
+  try {
+    // Build candidate diffs section
+    const diffsSection = candidates
+      .map((c) => {
+        const truncated = c.diff.length > MAX_DIFF_LENGTH
+          ? c.diff.slice(0, MAX_DIFF_LENGTH) + '\n... (truncated)'
+          : c.diff;
+        return `### Competitor ${c.id} — Strategy: "${c.strategy}"\n\`\`\`diff\n${truncated}\n\`\`\``;
+      })
+      .join('\n\n');
+
+    // Build file-level convergence context
+    const fileContext = [
+      `File-level convergence ratio: ${convergenceAnalysis.convergence_ratio}`,
+      `Common files modified by all: ${(convergenceAnalysis.common_files ?? []).join(', ') || 'none'}`,
+      `Divergent files (not shared): ${(convergenceAnalysis.divergent_files ?? []).join(', ') || 'none'}`,
+    ].join('\n');
+
+    const prompt = `You are analyzing ${candidates.length} independent implementations of the same task to identify convergent design decisions.
+
+## Task
+Title: ${task.title}
+Description: ${task.description ?? ''}
+Acceptance Criteria: ${Array.isArray(task.acceptance_criteria) ? task.acceptance_criteria.join('; ') : (task.acceptance_criteria ?? 'none')}
+
+## File-Level Convergence Metrics
+${fileContext}
+
+## Implementation Diffs
+${diffsSection}
+
+## Instructions
+Perform a SEMANTIC and DIRECTIONAL analysis — focus on high-level convergent design decisions, architectural choices, API designs, data flow decisions, and error handling approaches that multiple implementations independently chose. Do NOT do a line-by-line code comparison.
+
+Identify:
+1. **Convergent Patterns**: Architectural choices, API designs, data flow decisions, or error handling approaches that multiple implementations independently chose. For each, note which competitors chose it and your confidence (0-1) that this represents a genuine design convergence.
+2. **Divergent Approaches**: Fundamental differences where implementations took completely different directions.
+3. **Synthesis Viability**: Whether there is enough convergence to create a meaningful merged/synthesized implementation.
+
+Respond with JSON only:
+{
+  "convergent_patterns": [{"pattern": "description", "competitors": [0, 1], "confidence": 0.9}],
+  "divergent_approaches": ["description of divergence"],
+  "synthesis_viable": true,
+  "rationale": "explanation of synthesis viability assessment"
+}`;
+
+    const systemPrompt = 'You are an expert software architect analyzing convergent evolution across independent implementations. Focus on high-level design decisions, not line-by-line code comparison. Respond with valid JSON only.';
+
+    const response = await callClaude({
+      prompt,
+      systemPrompt,
+      model: config.models.planner,
+      maxBudgetUsd: CONVERGENCE_ANALYSIS_BUDGET_USD,
+      logFile: `${taskDir}/convergence-analysis.log`,
+    });
+
+    // Record cost regardless of success/failure
+    recordCost(`task-${task.id}-convergence-analysis`, response.total_cost_usd ?? 0);
+
+    if (response.is_error || !response.result) {
+      return { ...fallback, rationale: `AI analysis failed: ${response.result ?? 'empty response'}` };
+    }
+
+    // Strip markdown code fences if present
+    let raw = response.result.trim();
+    if (raw.startsWith('```')) {
+      raw = raw.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    }
+
+    const parsed = JSON.parse(raw);
+
+    // Validate and coerce fields with defensive defaults
+    const convergent_patterns = Array.isArray(parsed.convergent_patterns)
+      ? parsed.convergent_patterns.map((p: any) => ({
+          pattern: typeof p === 'string' ? p : (p.pattern ?? ''),
+          competitors: Array.isArray(p?.competitors) ? p.competitors : [],
+          confidence: typeof p?.confidence === 'number' ? p.confidence : 0.5,
+        }))
+      : [];
+
+    const divergent_approaches = Array.isArray(parsed.divergent_approaches)
+      ? parsed.divergent_approaches.map((d: any) => typeof d === 'string' ? d : String(d))
+      : [];
+
+    const synthesis_viable = typeof parsed.synthesis_viable === 'boolean'
+      ? parsed.synthesis_viable
+      : false;
+
+    const rationale = typeof parsed.rationale === 'string'
+      ? parsed.rationale
+      : '';
+
+    const result: SemanticConvergenceAnalysis = {
+      convergent_patterns,
+      divergent_approaches,
+      synthesis_viable,
+      rationale,
+    };
+
+    log.info(`Semantic convergence analysis: ${convergent_patterns.length} convergent patterns found, synthesis_viable=${synthesis_viable}`);
+
+    return result;
+  } catch (err: any) {
+    log.warn(`Semantic convergence analysis failed: ${err?.message ?? err}`);
+    return { ...fallback, rationale: `Analysis error: ${err?.message ?? 'unknown error'}` };
+  }
 }
