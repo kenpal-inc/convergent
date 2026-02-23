@@ -1,25 +1,27 @@
 {
   "models": {
     "planner": "opus",
-    "persona": "opus",
-    "synthesizer": "opus",
     "executor": "opus"
   },
   "budget": {
-    "total_max_usd": 50.00,
-    "per_task_max_usd": 10.00,
-    "per_persona_max_usd": 1.00,
-    "synthesis_max_usd": 2.00,
+    "total_max_usd": 75.00,
+    "per_task_max_usd": 15.00,
+    "plan_max_usd": 2.00,
     "execution_max_usd": 5.00,
     "review_max_usd": 2.00,
     "per_review_persona_max_usd": 0.80
   },
   "parallelism": {
-    "persona_timeout_seconds": 120,
+    "tournament_timeout_seconds": 1800,
     "explore_timeout_seconds": 1200,
     "command_timeout_seconds": 600
   },
+  "tournament": {
+    "competitors": 3,
+    "strategies": ["pragmatist", "thorough", "deconstructor"]
+  },
   "verification": {
+    "auto_detect": true,
     "commands": [],
     "max_retries": 2
   },
@@ -27,11 +29,6 @@
     "enabled": true,
     "max_retries": 2,
     "personas": ["correctness", "security", "maintainability"]
-  },
-  "personas": {
-    "trivial": [],
-    "standard": ["pragmatist", "tdd", "security"],
-    "complex": ["conservative", "minimalist", "tdd", "performance", "ux", "security", "pragmatist"]
   },
   "git": {
     "auto_commit": true,

@@ -268,6 +268,42 @@ export async function generateSummaryReport(
     }
     lines.push('');
 
+    // 6b. Tournament metrics
+    const tasksWithMetrics = taskList
+      .map(t => {
+        const statusObj = taskStatuses[t.id];
+        const metrics = typeof statusObj === 'object' ? (statusObj as any).tournament_metrics : undefined;
+        return { id: t.id, metrics };
+      })
+      .filter(t => t.metrics);
+
+    if (tasksWithMetrics.length > 0) {
+      lines.push('## Tournament Results');
+      lines.push('');
+      lines.push('| Task | Competitors | Succeeded | Winner | Score | Convergence | Diff Lines |');
+      lines.push('|------|-------------|-----------|--------|-------|-------------|------------|');
+
+      for (const { id, metrics: m } of tasksWithMetrics) {
+        const conv = m.convergence_ratio !== undefined ? `${(m.convergence_ratio * 100).toFixed(0)}%` : '-';
+        const diffLines = m.diff_lines_winner !== undefined ? String(m.diff_lines_winner) : '-';
+        lines.push(`| ${id} | ${m.competitors_count} | ${m.implementations_succeeded} | ${m.winner_strategy} | ${m.winner_score} | ${conv} | ${diffLines} |`);
+      }
+
+      const avgScore = tasksWithMetrics.reduce((s, t) => s + t.metrics.winner_score, 0) / tasksWithMetrics.length;
+      const withConvergence = tasksWithMetrics.filter(t => t.metrics.convergence_ratio !== undefined);
+      const avgConvergence = withConvergence.length > 0
+        ? withConvergence.reduce((s, t) => s + t.metrics.convergence_ratio, 0) / withConvergence.length
+        : undefined;
+
+      lines.push('');
+      let summary = `**Summary**: ${tasksWithMetrics.length} tournaments. Average winner score: ${avgScore.toFixed(0)}.`;
+      if (avgConvergence !== undefined) {
+        summary += ` Average convergence: ${(avgConvergence * 100).toFixed(0)}%.`;
+      }
+      lines.push(summary);
+      lines.push('');
+    }
+
     // 7. Git history (conditional)
     if (config.git?.auto_commit || config.git?.autoCommit) {
       lines.push('## Git Commit History');

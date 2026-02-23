@@ -169,10 +169,62 @@ Write only the commit message, nothing else. Do not use conventional commit pref
   return true;
 }
 
-export async function gitRevertChanges(projectRoot: string): Promise<void> {
-  log.warn("Reverting uncommitted changes");
-  await run(["checkout", "--", "."], projectRoot);
-  await run(["clean", "-fd"], projectRoot);
+export async function gitRevertChanges(projectRoot: string, baseCommit?: string): Promise<void> {
+  if (baseCommit) {
+    // Reset to base commit — undoes both uncommitted changes AND intermediate commits
+    // made by review fix executors that may have shifted HEAD
+    log.warn(`Reverting all changes back to base commit ${baseCommit.slice(0, 8)}`);
+    await run(["reset", "--hard", baseCommit], projectRoot);
+    await run(["clean", "-fd", "-e", ".convergent"], projectRoot);
+  } else {
+    log.warn("Reverting uncommitted changes");
+    await run(["checkout", "--", "."], projectRoot);
+    await run(["clean", "-fd", "-e", ".convergent"], projectRoot);
+  }
+}
+
+// --- Worktree operations for tournament ---
+
+export async function createWorktree(
+  projectRoot: string,
+  worktreePath: string,
+  baseCommit: string,
+): Promise<boolean> {
+  const result = await run(
+    ["worktree", "add", worktreePath, baseCommit, "--detach"],
+    projectRoot,
+  );
+  if (result.exitCode !== 0) {
+    log.error(`Failed to create worktree at ${worktreePath}: ${result.stderr}`);
+    return false;
+  }
+  return true;
+}
+
+export async function removeWorktree(
+  projectRoot: string,
+  worktreePath: string,
+): Promise<void> {
+  await run(["worktree", "remove", worktreePath, "--force"], projectRoot);
+}
+
+export async function getWorktreeDiff(worktreePath: string): Promise<string> {
+  const result = await run(["diff", "HEAD", "--", ".", ":!.convergent"], worktreePath);
+  return result.stdout;
+}
+
+export async function getWorktreeChangedFiles(worktreePath: string): Promise<string[]> {
+  const tracked = await run(["diff", "--name-only", "HEAD"], worktreePath);
+  const untracked = await run(["ls-files", "--others", "--exclude-standard"], worktreePath);
+  return [
+    ...tracked.stdout.trim().split("\n"),
+    ...untracked.stdout.trim().split("\n"),
+  ].filter(f => f && !f.startsWith(".convergent/"));
+}
+
+export async function getHeadCommit(projectRoot: string): Promise<string> {
+  const result = await run(["rev-parse", "HEAD"], projectRoot);
+  return result.stdout.trim();
 }
 
 export async function getGitLog(

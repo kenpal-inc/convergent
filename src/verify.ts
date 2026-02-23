@@ -1,4 +1,5 @@
-import { mkdirSync } from "fs";
+import { mkdirSync, existsSync, readFileSync } from "fs";
+import { join } from "path";
 import { log } from "./logger";
 import type { Config } from "./types";
 
@@ -59,16 +60,58 @@ async function runCommand(
   }
 }
 
+/**
+ * Auto-detect verification commands from project structure.
+ * Checks for tsconfig.json, package.json scripts, prettier config.
+ */
+export function autoDetectVerification(projectRoot: string): string[] {
+  const commands: string[] = [];
+
+  if (existsSync(join(projectRoot, "tsconfig.json"))) {
+    commands.push("bunx tsc --noEmit");
+  }
+
+  const pkgPath = join(projectRoot, "package.json");
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      if (pkg.scripts?.lint) commands.push("bun run lint");
+      if (pkg.scripts?.test) commands.push("bun test");
+      if (pkg.devDependencies?.prettier || pkg.dependencies?.prettier) {
+        commands.push("bunx prettier --check .");
+      }
+    } catch { /* ignore parse errors */ }
+  }
+
+  return commands;
+}
+
+/**
+ * Resolve which verification commands to use:
+ * 1. If config.verification.commands is non-empty, use those
+ * 2. If auto_detect is true (default), auto-detect from project
+ * 3. Otherwise, empty (no verification)
+ */
+export function resolveVerificationCommands(config: Config, projectRoot: string): string[] {
+  if (config.verification.commands && config.verification.commands.length > 0) {
+    return config.verification.commands;
+  }
+  if (config.verification.auto_detect !== false) {
+    return autoDetectVerification(projectRoot);
+  }
+  return [];
+}
+
 export async function runVerification(
   taskId: string,
   config: Config,
   projectRoot: string,
   outputDir: string,
 ): Promise<boolean> {
-  const commands = config.verification.commands;
+  const commands = resolveVerificationCommands(config, projectRoot);
 
   if (!commands || commands.length === 0) {
-    log.info("No verification commands configured, skipping verification");
+    log.info("No verification commands configured or detected, skipping verification");
     return true;
   }
 
@@ -129,4 +172,65 @@ export async function runVerification(
   }
 
   return allPassed;
+}
+
+// --- Tournament scoring ---
+
+interface VerificationScoreDetail {
+  name: string;
+  passed: boolean;
+  weight: number;
+}
+
+interface VerificationScore {
+  totalScore: number;
+  maxScore: number;
+  allPassed: boolean;
+  details: VerificationScoreDetail[];
+}
+
+const VERIFICATION_WEIGHTS: Record<string, number> = {
+  test: 40,
+  typecheck: 30,
+  lint: 15,
+  format: 15,
+};
+
+function classifyCommand(cmd: string): string {
+  const lower = cmd.toLowerCase();
+  if (lower.includes("tsc") || lower.includes("typecheck")) return "typecheck";
+  if (lower.includes("test")) return "test";
+  if (lower.includes("prettier") || lower.includes("format")) return "format";
+  if (lower.includes("lint") || lower.includes("eslint") || lower.includes("biome")) return "lint";
+  return "other";
+}
+
+/**
+ * Run verification commands and return a score (for tournament ranking).
+ * Unlike runVerification, this does NOT write to task-specific dirs.
+ */
+export async function scoreVerification(
+  commands: string[],
+  projectRoot: string,
+  timeoutMs: number = 300_000,
+): Promise<VerificationScore> {
+  if (commands.length === 0) {
+    return { totalScore: 100, maxScore: 100, allPassed: true, details: [] };
+  }
+
+  const results = await Promise.all(
+    commands.map(cmd => runCommand(cmd, projectRoot, timeoutMs)),
+  );
+
+  const details: VerificationScoreDetail[] = results.map(r => {
+    const category = classifyCommand(r.cmd);
+    const weight = VERIFICATION_WEIGHTS[category] ?? 10;
+    return { name: category, passed: r.passed, weight };
+  });
+
+  const maxScore = details.reduce((s, d) => s + d.weight, 0);
+  const totalScore = details.reduce((s, d) => s + (d.passed ? d.weight : 0), 0);
+  const allPassed = details.every(d => d.passed);
+
+  return { totalScore, maxScore, allPassed, details };
 }

@@ -11,7 +11,9 @@ const INITIAL_BACKOFF_MS = 3_000;
 function isTransientError(response: ClaudeResponse): boolean {
   if (!response.is_error) return false;
   const msg = (response.result ?? "").toLowerCase();
-  return (
+
+  // API-level transient errors
+  if (
     msg.includes("rate limit") ||
     msg.includes("overloaded") ||
     msg.includes("429") ||
@@ -23,7 +25,14 @@ function isTransientError(response: ClaudeResponse): boolean {
     msg.includes("request timeout") ||
     msg.includes("econnreset") ||
     msg.includes("socket hang up")
-  );
+  ) return true;
+
+  // Timeout with $0 cost = API never responded (not a genuinely slow task)
+  if (response.total_cost_usd === 0 && msg.includes("exceeded") && msg.includes("limit")) {
+    return true;
+  }
+
+  return false;
 }
 
 export async function callClaude(
@@ -33,7 +42,10 @@ export async function callClaude(
     const response = await callClaudeOnce(options);
 
     if (attempt < MAX_RETRIES && isTransientError(response)) {
-      const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+      // Use longer backoff for timeout errors (API was completely unresponsive)
+      const isTimeout = (response.result ?? "").toLowerCase().includes("exceeded");
+      const baseMs = isTimeout ? 15_000 : INITIAL_BACKOFF_MS;
+      const backoffMs = baseMs * Math.pow(2, attempt);
       log.warn(`Transient error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${response.result?.slice(0, 120)}`);
       log.warn(`Retrying in ${(backoffMs / 1000).toFixed(0)}s...`);
       await Bun.sleep(backoffMs);
@@ -80,17 +92,35 @@ async function callClaudeOnce(
   if (options.tools !== undefined) {
     args.push("--tools", options.tools);
   }
-  if (options.dangerouslySkipPermissions) {
+  // In --print (headless) mode, tool use requires permission bypass.
+  // Auto-enable when tools are specified and non-empty to prevent hangs.
+  if (options.dangerouslySkipPermissions || (options.tools && options.tools.length > 0)) {
     args.push("--dangerously-skip-permissions");
   }
 
   log.debug(`Calling claude with model=${options.model}`);
 
+  // Strip Claude Code session vars to prevent "nested session" detection
+  // when convergent is run from within a Claude Code session.
+  const cleanEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([k]) =>
+      !k.startsWith("CLAUDE_CODE_") && k !== "CLAUDECODE"
+    ),
+  );
+
+  // Pass prompt as in-memory buffer to avoid file system race conditions
+  // when multiple processes are spawned concurrently.
+  const stdinBuffer = Buffer.from(options.prompt, "utf-8");
+  log.debug(`Spawning claude: stdin=${stdinBuffer.length} bytes, args=${args.length} items`);
+
   const proc = Bun.spawn(args, {
-    stdin: new Response(options.prompt).body!,
+    stdin: stdinBuffer,
     stdout: "pipe",
     stderr: "pipe",
+    env: cleanEnv,
+    cwd: options.cwd,
   });
+  log.debug(`Spawned claude pid=${proc.pid}`);
 
   // Create timeout promise if timeoutMs is specified
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -126,7 +156,7 @@ async function callClaudeOnce(
 
     // Check for timeout first, before other error handling
     if (timedOut) {
-      const timeoutMsg = `Claude process timed out after ${options.timeoutMs}ms`;
+      const timeoutMsg = `Claude process exceeded ${options.timeoutMs}ms limit (killed)`;
 
       // Write timeout info to log file if specified
       if (options.logFile) {
@@ -199,7 +229,7 @@ async function callClaudeOnce(
         type: "result",
         subtype: "error",
         is_error: true,
-        result: `Claude process timed out after ${options.timeoutMs}ms`,
+        result: `Claude process exceeded ${options.timeoutMs}ms limit (killed)`,
         total_cost_usd: 0,
       };
     }

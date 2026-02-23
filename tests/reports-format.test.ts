@@ -18,6 +18,23 @@ mock.module('../src/claude', () => ({
 
 const TEST_DIR = join(import.meta.dir, '.test-reports-tmp');
 
+const mockConfig = {
+  models: { planner: 'opus', executor: 'opus' },
+  budget: {
+    total_max_usd: 50.0,
+    per_task_max_usd: 10.0,
+    plan_max_usd: 2.0,
+    execution_max_usd: 5.0,
+    review_max_usd: 2.0,
+    per_review_persona_max_usd: 0.80,
+  },
+  parallelism: { tournament_timeout_seconds: 600 },
+  tournament: { competitors: 3, strategies: ['pragmatist', 'thorough', 'deconstructor'] },
+  verification: { auto_detect: true, commands: ['bun test'], max_retries: 2 },
+  review: { enabled: true, max_retries: 2, personas: ['correctness', 'security', 'maintainability'] },
+  git: { auto_commit: true, create_branch: false, create_pr: false },
+};
+
 describe('formatReportMarkdown', () => {
   test('generates valid markdown with all required sections', () => {
     const result = formatReportMarkdown('001', 'Add reports feature', 'file.ts | 10 +', 'Added reporting.', '2024-01-01T00:00:00.000Z');
@@ -47,37 +64,6 @@ describe('formatReportMarkdown', () => {
 });
 
 describe('generateDiffSummary', () => {
-  const mockConfig = {
-    models: {
-      planner: 'claude-3-5-sonnet-20241022',
-      persona: 'claude-3-5-sonnet-20241022',
-      synthesizer: 'claude-3-5-sonnet-20241022',
-      executor: 'claude-3-5-sonnet-20241022',
-    },
-    budget: {
-      total_max_usd: 50.0,
-      per_task_max_usd: 10.0,
-      per_persona_max_usd: 2.0,
-      synthesis_max_usd: 1.0,
-      execution_max_usd: 5.0,
-    },
-    parallelism: {
-      persona_timeout_seconds: 300,
-    },
-    verification: {
-      commands: ['bun test'],
-      max_retries: 2,
-    },
-    personas: {
-      trivial: ['pragmatist'],
-      standard: ['pragmatist', 'security'],
-      complex: ['pragmatist', 'security', 'tdd'],
-    },
-    git: {
-      auto_commit: true,
-    },
-  };
-
   beforeEach(() => {
     mockCallClaude.mockClear();
   });
@@ -146,37 +132,6 @@ describe('generateDiffSummary', () => {
 });
 
 describe('generateTaskReport', () => {
-  const mockConfig = {
-    models: {
-      planner: 'claude-3-5-sonnet-20241022',
-      persona: 'claude-3-5-sonnet-20241022',
-      synthesizer: 'claude-3-5-sonnet-20241022',
-      executor: 'claude-3-5-sonnet-20241022',
-    },
-    budget: {
-      total_max_usd: 50.0,
-      per_task_max_usd: 10.0,
-      per_persona_max_usd: 2.0,
-      synthesis_max_usd: 1.0,
-      execution_max_usd: 5.0,
-    },
-    parallelism: {
-      persona_timeout_seconds: 300,
-    },
-    verification: {
-      commands: ['bun test'],
-      max_retries: 2,
-    },
-    personas: {
-      trivial: ['pragmatist'],
-      standard: ['pragmatist', 'security'],
-      complex: ['pragmatist', 'security', 'tdd'],
-    },
-    git: {
-      auto_commit: true,
-    },
-  };
-
   beforeEach(() => {
     mkdirSync(TEST_DIR, { recursive: true });
     mockCallClaude.mockClear();
@@ -217,7 +172,6 @@ describe('generateTaskReport', () => {
   });
 
   test('returns false on failure without throwing', async () => {
-    // Use an invalid path that will cause writeFileSync to fail
     const result = await generateTaskReport('004', 'Task', mockConfig, TEST_DIR, '/nonexistent/readonly/path');
     expect(result).toBe(false);
   });

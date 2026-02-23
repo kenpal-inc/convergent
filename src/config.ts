@@ -62,8 +62,6 @@ export function applyOverrides(
   }
   if (overrides.model) {
     result.models.planner = overrides.model;
-    result.models.persona = overrides.model;
-    result.models.synthesizer = overrides.model;
     result.models.executor = overrides.model;
   }
   return result;

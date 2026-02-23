@@ -15,17 +15,17 @@
       "properties": {
         "compliant": {
           "type": "boolean",
-          "description": "Whether the implementation follows the converged plan"
+          "description": "Whether the implementation satisfies the task requirements"
         },
         "missing_steps": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Implementation steps from the plan that are missing in the diff"
+          "description": "Required changes from the task description that are missing in the diff"
         },
         "extra_changes": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Changes in the diff that were not part of the plan"
+          "description": "Changes in the diff that go beyond what the task requires"
         },
         "notes": {
           "type": "string",
