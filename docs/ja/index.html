@@ -135,9 +135,15 @@
             <h3>Review</h3>
             <p>3人の専門レビュアーが並列に監査します。正確性、セキュリティ、保守性の観点から評価します。全員が承認するまでコミットされません。</p>
           </div>
+          <div class="phase-card fade-in">
+            <div class="phase-label">Phase F</div>
+            <div class="phase-icon">&#128296;</div>
+            <h3>Integration Check</h3>
+            <p>全タスク完了後、AIがタスク横断の整合性を検証します。未実装のAPIルート、壊れたimport、スキーマの不整合を検出し、重大な問題は自動修正します。</p>
+          </div>
         </div>
 
-        <p class="pipeline-summary fade-in">全タスク完了または予算消化まで繰り返します。</p>
+        <p class="pipeline-summary fade-in">全タスク完了または予算消化まで繰り返します。Phase F は最後に1回実行されます。</p>
       </div>
     </section>
 

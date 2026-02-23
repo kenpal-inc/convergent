@@ -41,6 +41,12 @@ code task flow:
     → 3 specialist reviewers audit in parallel
     → All approved → commit / changes_requested → retry
 
+After all tasks complete:
+  Phase F: Integration Check
+    → AI-powered cross-task coherence verification
+    → Detects missing routes, broken imports, inconsistent schemas
+    → Auto-fixes critical issues and re-verifies
+
 explore task flow:
   → Investigates using all user-permitted tools (Playwright CLI, MCP tools, etc.)
   → Records results to findings.md → auto-propagated to dependent tasks
@@ -59,9 +65,9 @@ Competitor strategies are assigned based on task complexity:
 
 | Complexity | Competitors | Use Case |
 |------------|-------------|----------|
-| `trivial` | 1 (single implementation) | Single file, simple changes |
-| `standard` | 2 (pragmatist, thorough) | 2–5 files, moderate logic |
-| `complex` | 3 (pragmatist, thorough, deconstructor) | 6+ files, architectural changes |
+| `trivial` | 1 (single implementation) | Scaffolding, boilerplate, config, single-pattern tasks |
+| `standard` | 2 (pragmatist, thorough) | Moderate logic, CRUD, clear conventions |
+| `complex` | 3 (pragmatist, thorough, deconstructor) | Genuine architectural decisions, novel design patterns |
 
 ### Task Types
 
@@ -213,7 +219,8 @@ Place a `convergent.config.json` in your project root to customize:
 {
   "models": {
     "planner": "opus",
-    "executor": "opus"
+    "executor": "opus",
+    "judge": "sonnet"
   },
   "budget": {
     "total_max_usd": 75.00,
@@ -375,6 +382,7 @@ Verification commands (lint, typecheck, test) have a configurable timeout (defau
 - **Tournament isolation**: Each competitor runs in its own git worktree — failures can't corrupt the main tree
 - **Verification gate**: Winner's changes are verified in both the worktree and the main working tree
 - **Multi-persona review gate**: After verification, 3 specialist reviewers audit correctness, security, and maintainability in parallel (any rejection triggers a fix)
+- **Integration check (Phase F)**: After all tasks complete, AI-powered cross-task coherence verification detects missing routes, broken imports, and inconsistent schemas — auto-fixes critical issues
 - **Auto-revert**: Failed task changes are automatically rolled back
 - **Resumable**: State is saved on Ctrl+C, resume with `--resume`
 

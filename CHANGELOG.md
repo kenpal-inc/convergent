@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.4.0] - 2026-02-24
+
+### Added
+- **Phase F**: Post-pipeline integration check — AI-powered cross-task coherence verification and auto-repair
+  - Runs after all tasks complete, before summary report
+  - Detects issues like missing API routes referenced by frontend, broken imports, inconsistent schemas
+  - Automatically spawns a fix agent for critical issues, then re-verifies and commits
+  - Non-blocking: failures don't stop the pipeline
+- **`models.judge`** config option (default: `sonnet`) — separate model for judging and commit message generation
+  - `judgeCompetitors` and `gitCommitTask` use the judge model (cost-effective)
+  - `analyzeSemanticConvergence` stays on `models.planner` (opus) to preserve synthesis quality
+- **Dynamic competitor scaling** based on task complexity
+  - Phase 0 now classifies tasks more accurately: trivial (1 competitor), standard (2), complex (3)
+  - Improved complexity guidance in system prompt: greenfield setup is always trivial, CRUD is standard, only genuine architectural decisions are complex
+
+### Changed
+- Phase 0 system prompt rewritten with detailed complexity classification guidance
+- `estimated_complexity` schema description updated to match new guidance
+
+## [2.3.1] - 2026-02-23
+
+### Fixed
+- **Worktree cleanup**: `removeWorktree()` now runs `git config --unset core.worktree` after removal, preventing stale worktree paths from breaking git commands
+
+## [2.3.0] - 2026-02-23
+
+### Fixed
+- **Commit message sanitization**: `looksLikeClaudeError()` in git.ts detects Claude error messages ("Prompt is too long", etc.) and prevents them from becoming commit messages
+- **Synthesis empty response**: Added `tools: ""` to `analyzeSemanticConvergence` and `judgeCompetitors` calls, fixing empty structured output
+- **Greenfield `.gitignore`**: Auto-generates sensible defaults (node_modules, .next, .env, etc.) when no `.gitignore` exists, preventing accidental commits of dependency directories
+
+## [2.2.0] - 2026-02-23
+
+### Added
+- **Bare text argument**: Running `convergent "your instructions here"` is now shorthand for `--instructions "your instructions here"`
+
+## [2.1.0] - 2026-02-23
+
+### Added
+- **Convergence synthesis**: AI-powered semantic convergence analysis for tournament results
+  - `analyzeSemanticConvergence` identifies shared design decisions across competing implementations
+  - `synthesizeFromConvergence` creates optimal solutions from convergent patterns
+  - `convergence_threshold` config option (default: 0.5) controls sensitivity
+- Convergence synthesis types in `types.ts` with full test coverage
+- Synthesis metadata recorded in task state and surfaced in reports
+
+### Changed
+- Tournament engine refactored to use convergence-based synthesis with fallback to score-based selection
+- Landing page copy updated to reflect convergence-based synthesis mechanism
+
 ## [2.0.0] - 2026-02-22
 
 ### Changed

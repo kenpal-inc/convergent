@@ -7,7 +7,7 @@ allowed-tools: Bash(convergent:*)
 
 # convergent: Tournament-Based Autonomous Development
 
-Run convergent. This tool autonomously implements code through a pipeline of Phase 0 (task generation) → Phase T (tournament) → Verify → Phase C (review).
+Run convergent. This tool autonomously implements code through a pipeline of Phase 0 (task generation) → Phase T (tournament) → Verify → Phase C (review) → Phase F (integration check).
 
 ## When Arguments Are Provided
 
