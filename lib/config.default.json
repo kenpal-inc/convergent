@@ -18,7 +18,8 @@
   },
   "tournament": {
     "competitors": 3,
-    "strategies": ["pragmatist", "thorough", "deconstructor"]
+    "strategies": ["pragmatist", "thorough", "deconstructor"],
+    "convergence_threshold": 0.5
   },
   "verification": {
     "auto_detect": true,
