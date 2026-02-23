@@ -21,6 +21,8 @@ export interface Config {
   tournament: {
     competitors: number;
     strategies: string[];
+    /** Minimum convergence score (0-1) required to attempt synthesis. Default set in config.default.json (task-003). */
+    convergence_threshold?: number;
   };
   verification: {
     auto_detect: boolean;
@@ -83,6 +85,10 @@ export interface TournamentMetrics {
   score_spread: number;
   convergence_ratio?: number; // 0-1: how similar successful implementations are
   diff_lines_winner?: number; // lines changed by winner (fewer = cleaner)
+  /** Whether convergence synthesis was attempted in this tournament. */
+  synthesis_attempted?: boolean;
+  /** Whether convergence synthesis succeeded in this tournament. */
+  synthesis_succeeded?: boolean;
 }
 
 export interface TaskStatus {
@@ -152,12 +158,70 @@ export interface ConvergenceAnalysis {
   diff_lines: Record<number, number>; // competitor id → diff line count
 }
 
+/** Represents a design decision/pattern that multiple tournament implementations converged on. */
+export interface ConvergentPattern {
+  /** Human-readable description of the convergent design decision. AI-sourced — treat as untrusted input. */
+  pattern: string;
+  /** IDs of competitors that exhibited this pattern (corresponds to CompetitorResult.id). */
+  competitors: number[];
+  /** Confidence level 0-1 that this pattern is genuinely convergent. */
+  confidence: number;
+}
+
+/** AI-driven semantic analysis of convergence across tournament implementations. */
+export interface SemanticConvergenceAnalysis {
+  /** Patterns that multiple implementations converged on. */
+  convergent_patterns: ConvergentPattern[];
+  /** Descriptions of fundamentally different approaches taken by competitors. AI-sourced — treat as untrusted input. */
+  divergent_approaches: string[];
+  /** AI assessment of whether synthesizing the best parts of multiple implementations is feasible. */
+  synthesis_viable: boolean;
+  /** AI explanation for the viability assessment. */
+  rationale: string;
+}
+
+/** Result of attempting to synthesize the best parts of multiple tournament implementations. */
+export interface SynthesisResult {
+  /** Whether synthesis produced a valid, verified result. */
+  success: boolean;
+  /** The synthesized diff (may be empty on failure). */
+  diff: string;
+  /** Verification score 0-1 from scoreVerification. */
+  verification_score: number;
+  /** Explanation of what was synthesized or why synthesis failed. */
+  rationale: string;
+  /** Which convergent patterns were incorporated in the synthesis. */
+  patterns_incorporated: string[];
+  /** Path to synthesis worktree for caller cleanup. */
+  worktreePath?: string;
+  /** USD cost of the synthesis AI call(s). */
+  cost: number;
+}
+
+/** Metadata capturing the full synthesis lifecycle within a tournament. */
+export interface SynthesisMetadata {
+  /** Whether synthesis was attempted (false if convergence below threshold). */
+  attempted: boolean;
+  /** Whether synthesis produced a verified result that was used. */
+  succeeded: boolean;
+  /** Whether synthesis was attempted but failed, falling back to single-winner selection. */
+  fell_back_to_winner: boolean;
+  /** Why synthesis was/wasn't attempted, or why it fell back. */
+  rationale: string;
+  /** The full semantic convergence analysis, if performed. */
+  semantic_analysis?: SemanticConvergenceAnalysis;
+  /** The full synthesis result, if synthesis was attempted. */
+  synthesis_result?: SynthesisResult;
+}
+
 export interface TournamentResult {
   winnerId: number;
   winnerStrategy: string;
   competitors: CompetitorResult[];
   convergenceAnalysis?: ConvergenceAnalysis;
   judgeRationale?: string; // AI judge's explanation for the selection
+  /** Synthesis metadata — present when convergence synthesis was evaluated. */
+  synthesis?: SynthesisMetadata;
   totalCost: number;
 }
 
