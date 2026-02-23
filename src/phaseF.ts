@@ -1,11 +1,63 @@
 import { mkdirSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { log } from "./logger";
-import { callClaude } from "./claude";
+import { callClaude, getStructuredOutput } from "./claude";
 import { recordCost } from "./budget";
 import { resolveVerificationCommands } from "./verify";
 import { gitCommitTask } from "./git";
 import type { Config, TaskQueue } from "./types";
+
+/**
+ * Extract a JSON object from text that may contain prose and/or markdown fences.
+ * Tries in order: (1) ```json...``` block, (2) first { ... last }, (3) raw parse.
+ */
+export function extractJSON<T>(text: string): T {
+  // Try extracting from ```json ... ``` fenced block
+  const fenceMatch = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
+  if (fenceMatch) {
+    return JSON.parse(fenceMatch[1].trim());
+  }
+
+  // Try direct parse (already clean JSON)
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{")) {
+    return JSON.parse(trimmed);
+  }
+
+  // Try extracting first { ... last } from surrounding prose
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    return JSON.parse(text.slice(start, end + 1));
+  }
+
+  throw new Error("No JSON object found in text");
+}
+
+const DIAGNOSIS_SCHEMA = {
+  type: "object",
+  properties: {
+    issues: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+          description: { type: "string" },
+          fix_hint: { type: "string" },
+        },
+        required: ["severity", "description", "fix_hint"],
+      },
+    },
+    coherent: { type: "boolean" },
+  },
+  required: ["issues", "coherent"],
+};
+
+type DiagnosisResult = {
+  issues: Array<{ severity: string; description: string; fix_hint: string }>;
+  coherent: boolean;
+};
 
 const INTEGRATION_CHECK_BUDGET_USD = 0.50;
 const INTEGRATION_FIX_BUDGET_USD = 5.00;
@@ -98,24 +150,17 @@ Analyze the project for cross-task integration issues. Common problems include:
 
 Check the actual file list above. If a frontend page calls PUT /api/members/[id], verify that app/api/members/[id]/route.ts (or equivalent) exists in the file list.
 
-Respond with JSON only:
-{
-  "issues": [
-    {"severity": "critical", "description": "description of the issue", "fix_hint": "what needs to be created/fixed"}
-  ],
-  "coherent": true
-}
-
-If there are no issues, return {"issues": [], "coherent": true}.
-Only flag issues you are CONFIDENT about based on the file list and verification errors. Do not speculate.`;
+Only flag issues you are CONFIDENT about based on the file list and verification errors. Do not speculate.
+Set "coherent" to true only if there are zero issues.`;
 
   log.info("  Running AI coherence analysis...");
 
   const diagResponse = await callClaude({
     prompt,
-    systemPrompt: "You are an expert software architect reviewing cross-module integration. Analyze file lists and verification output to find missing pieces. Respond with valid JSON only.",
+    systemPrompt: "You are an expert software architect reviewing cross-module integration. Analyze file lists and verification output to find missing pieces.",
     model: config.models.judge,
     maxBudgetUsd: INTEGRATION_CHECK_BUDGET_USD,
+    jsonSchema: DIAGNOSIS_SCHEMA,
     tools: "Read,Glob,Grep",
     dangerouslySkipPermissions: true,
     logFile: `${logDir}/diagnosis.log`,
@@ -129,17 +174,20 @@ Only flag issues you are CONFIDENT about based on the file list and verification
     return true; // Don't block on diagnosis failure
   }
 
-  // Parse diagnosis
-  let diagnosis: { issues: Array<{ severity: string; description: string; fix_hint: string }>; coherent: boolean };
-  try {
-    let raw = diagResponse.result.trim();
-    if (raw.startsWith("```")) {
-      raw = raw.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+  // Parse diagnosis — prefer structured_output (guaranteed by --json-schema),
+  // fall back to extractJSON from result text
+  let diagnosis: DiagnosisResult;
+  const structured = getStructuredOutput<DiagnosisResult>(diagResponse);
+  if (structured && structured.issues && typeof structured.coherent === "boolean") {
+    diagnosis = structured;
+  } else {
+    try {
+      diagnosis = extractJSON<DiagnosisResult>(diagResponse.result.trim());
+    } catch {
+      log.warn("  Failed to parse diagnosis JSON — skipping Phase F");
+      log.debug(`  Raw result (first 300 chars): ${diagResponse.result?.slice(0, 300)}`);
+      return true;
     }
-    diagnosis = JSON.parse(raw);
-  } catch {
-    log.warn("  Failed to parse diagnosis JSON — skipping Phase F");
-    return true;
   }
 
   if (diagnosis.coherent && diagnosis.issues.length === 0 && verifyErrors.length === 0) {
