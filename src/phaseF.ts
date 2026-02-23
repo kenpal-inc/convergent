@@ -161,8 +161,7 @@ Set "coherent" to true only if there are zero issues.`;
     model: config.models.judge,
     maxBudgetUsd: INTEGRATION_CHECK_BUDGET_USD,
     jsonSchema: DIAGNOSIS_SCHEMA,
-    tools: "Read,Glob,Grep",
-    dangerouslySkipPermissions: true,
+    tools: "",
     logFile: `${logDir}/diagnosis.log`,
     cwd: projectRoot,
   });
@@ -170,7 +169,7 @@ Set "coherent" to true only if there are zero issues.`;
   await recordCost("phase-f-diagnosis", diagResponse.total_cost_usd ?? 0);
 
   if (diagResponse.is_error || !diagResponse.result) {
-    log.warn("  Integration diagnosis failed — skipping Phase F");
+    log.warn(`  Integration diagnosis failed (${diagResponse.subtype ?? "no result"}) — skipping Phase F`);
     return true; // Don't block on diagnosis failure
   }
 
