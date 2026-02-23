@@ -18,6 +18,7 @@ import type {
   CompetitorResult,
   ConvergenceAnalysis,
   SemanticConvergenceAnalysis,
+  SynthesisMetadata,
   SynthesisResult,
   TournamentResult,
   Task,
@@ -420,9 +421,11 @@ export async function runTournament(
   }
 
   // --- Select winner ---
+  // Flow: synthesis-first-with-fallback
   // 1. Filter to passing implementations
-  // 2. If 2+ pass, AI judge compares diffs and picks the best
-  // 3. Fallback: verification score (desc) → cost (asc)
+  // 2. If convergence threshold met with 2+ candidates, attempt synthesis
+  // 3. If synthesis succeeds and score >= best individual, use synthesis
+  // 4. Fallback: AI judge compares diffs → score+cost
   const passingCompetitors = competitorResults
     .filter(c => c.implementationOk && c.verificationScore > 0);
 
@@ -442,76 +445,198 @@ export async function runTournament(
 
   let winner: CompetitorResult;
   let judgeRationale: string | undefined;
+  let synthesisMetadata: SynthesisMetadata | undefined;
+  let synthWorktreePath: string | undefined;
+  let synthesisWon = false;
+  // sourcePath: where to apply changed files from (synthesis worktree or winner worktree)
+  let sourcePath: string | undefined;
 
-  if (candidates.length >= 2) {
-    // Collect diffs for the judge (skip candidates with empty diffs)
-    log.info("  AI judge evaluating candidates...");
-    const allJudgeCandidates = await Promise.all(
-      candidates.map(async (c) => {
-        const wt = worktrees.find(w => w.id === c.id)!;
-        const diff = await getWorktreeDiff(wt.path);
-        return { id: c.id, strategy: c.strategy, diff };
-      }),
-    );
-    const judgeCandidates = allJudgeCandidates.filter(c => c.diff.trim().length > 0);
+  {
+    // --- Synthesis path ---
+    const convergenceThreshold = config.tournament.convergence_threshold ?? 0.5;
 
-    const judgeResult = await judgeCompetitors(task, judgeCandidates, config, taskDir);
+    if (candidates.length >= 2 && convergenceAnalysis && convergenceAnalysis.convergence_ratio >= convergenceThreshold) {
+      log.info(`  Convergence threshold met (${(convergenceAnalysis.convergence_ratio * 100).toFixed(0)}% >= ${(convergenceThreshold * 100).toFixed(0)}%), attempting synthesis...`);
 
-    if (judgeResult) {
-      winner = candidates.find(c => c.id === judgeResult.winnerId)!;
-      judgeRationale = judgeResult.rationale;
-      log.ok(`  Judge picked c-${winner.id} (${winner.strategy}): ${judgeRationale}`);
+      // Collect diffs for all passing candidates
+      const diffCandidates = await Promise.all(
+        candidates.map(async (c) => {
+          const wt = worktrees.find(w => w.id === c.id)!;
+          const diff = await getWorktreeDiff(wt.path);
+          return { id: c.id, strategy: c.strategy, diff };
+        }),
+      );
+
+      // Semantic convergence analysis
+      const semanticAnalysis = await analyzeSemanticConvergence(task, diffCandidates, config, taskDir, convergenceAnalysis);
+      log.info(`  Semantic analysis: synthesis_viable=${semanticAnalysis.synthesis_viable}`);
+
+      if (semanticAnalysis.synthesis_viable) {
+        // Attempt synthesis
+        const synthResult = await synthesizeImplementation(
+          task, diffCandidates, semanticAnalysis, config,
+          projectRoot, tournamentDir, taskDir, baseCommit,
+        );
+        synthWorktreePath = synthResult.worktreePath;
+
+        const bestIndividualScore = Math.max(...candidates.map(c => c.verificationScore));
+
+        if (synthResult.success && synthResult.verification_score >= bestIndividualScore) {
+          // Synthesis wins
+          log.ok(`  Synthesis score ${synthResult.verification_score} >= best individual ${bestIndividualScore}, using synthesis`);
+          synthesisWon = true;
+          sourcePath = synthResult.worktreePath;
+
+          // Set winner to the best individual for metadata (winnerId/winnerStrategy reflect source candidates)
+          candidates.sort((a, b) => {
+            if (b.verificationScore !== a.verificationScore) return b.verificationScore - a.verificationScore;
+            return a.cost - b.cost;
+          });
+          winner = candidates[0];
+
+          synthesisMetadata = {
+            attempted: true,
+            succeeded: true,
+            fell_back_to_winner: false,
+            rationale: synthResult.rationale,
+            semantic_analysis: semanticAnalysis,
+            synthesis_result: synthResult,
+          };
+        } else {
+          // Synthesis failed or scored below best individual — fallback
+          const reason = !synthResult.success
+            ? `Synthesis failed: ${synthResult.rationale}`
+            : `Synthesis score ${synthResult.verification_score} < best individual ${bestIndividualScore}`;
+          log.info(`  ${reason}, falling back to judge`);
+
+          synthesisMetadata = {
+            attempted: true,
+            succeeded: false,
+            fell_back_to_winner: true,
+            rationale: reason,
+            semantic_analysis: semanticAnalysis,
+            synthesis_result: synthResult,
+          };
+        }
+      } else {
+        // Synthesis not viable
+        log.info(`  Synthesis not viable: ${semanticAnalysis.rationale}`);
+        synthesisMetadata = {
+          attempted: false,
+          succeeded: false,
+          fell_back_to_winner: true,
+          rationale: semanticAnalysis.rationale,
+          semantic_analysis: semanticAnalysis,
+        };
+      }
     } else {
-      // Fallback: score → cost
-      log.info("  Falling back to score+cost selection");
-      candidates.sort((a, b) => {
-        if (b.verificationScore !== a.verificationScore) return b.verificationScore - a.verificationScore;
-        return a.cost - b.cost;
-      });
-      winner = candidates[0];
-    }
-  } else {
-    winner = candidates[0];
-  }
+      // Convergence threshold not met
+      const ratio = convergenceAnalysis?.convergence_ratio;
+      const ratioStr = ratio !== undefined ? (ratio * 100).toFixed(0) : 'N/A';
+      const threshStr = (convergenceThreshold * 100).toFixed(0);
 
-  const winnerWorktree = worktrees.find(wt => wt.id === winner.id)!;
-  const winnerDiffLines = convergenceAnalysis?.diff_lines[winner.id];
-
-  log.ok(`  Winner: c-${winner.id} (${winner.strategy}) — score ${winner.verificationScore}, $${winner.cost.toFixed(2)}${winnerDiffLines !== undefined ? `, ${winnerDiffLines} diff lines` : ""}`);
-
-  // --- Apply winner's changes to main working tree ---
-  log.info("  Applying winner's changes...");
-
-  const changedFiles = await getWorktreeChangedFiles(winnerWorktree.path);
-  if (changedFiles.length === 0) {
-    log.warn("  Winner has no changed files");
-  } else {
-    for (const file of changedFiles) {
-      const srcPath = join(winnerWorktree.path, file);
-      const destPath = join(projectRoot, file);
-      const destDir = join(projectRoot, file, "..");
-      mkdirSync(resolve(destDir), { recursive: true });
-      if (existsSync(srcPath)) {
-        cpSync(srcPath, destPath, { force: true });
+      if (candidates.length < 2) {
+        log.info(`  Single candidate, skipping synthesis`);
+        synthesisMetadata = {
+          attempted: false,
+          succeeded: false,
+          fell_back_to_winner: true,
+          rationale: `Only ${candidates.length} candidate(s), synthesis requires 2+`,
+        };
+      } else {
+        log.info(`  Convergence ratio ${ratioStr}% below threshold ${threshStr}%, skipping synthesis`);
+        synthesisMetadata = {
+          attempted: false,
+          succeeded: false,
+          fell_back_to_winner: true,
+          rationale: `Convergence ratio ${ratioStr}% below threshold ${threshStr}%`,
+        };
       }
     }
-    log.ok(`  Applied ${changedFiles.length} files from winner`);
+
+    // --- Fallback: judge then score+cost (only if synthesis didn't win) ---
+    if (!synthesisWon) {
+      if (candidates.length >= 2) {
+        // Collect diffs for the judge (skip candidates with empty diffs)
+        log.info("  AI judge evaluating candidates...");
+        const allJudgeCandidates = await Promise.all(
+          candidates.map(async (c) => {
+            const wt = worktrees.find(w => w.id === c.id)!;
+            const diff = await getWorktreeDiff(wt.path);
+            return { id: c.id, strategy: c.strategy, diff };
+          }),
+        );
+        const judgeCandidates = allJudgeCandidates.filter(c => c.diff.trim().length > 0);
+
+        const judgeResult = await judgeCompetitors(task, judgeCandidates, config, taskDir);
+
+        if (judgeResult) {
+          winner = candidates.find(c => c.id === judgeResult.winnerId)!;
+          judgeRationale = judgeResult.rationale;
+          log.ok(`  Judge picked c-${winner.id} (${winner.strategy}): ${judgeRationale}`);
+        } else {
+          // Fallback: score → cost
+          log.info("  Falling back to score+cost selection");
+          candidates.sort((a, b) => {
+            if (b.verificationScore !== a.verificationScore) return b.verificationScore - a.verificationScore;
+            return a.cost - b.cost;
+          });
+          winner = candidates[0];
+        }
+      } else {
+        winner = candidates[0];
+      }
+
+      const winnerWorktree = worktrees.find(wt => wt.id === winner!.id)!;
+      sourcePath = winnerWorktree.path;
+    }
+  }
+
+  const winnerDiffLines = convergenceAnalysis?.diff_lines[winner!.id];
+  const sourceLabel = synthesisWon ? 'synthesis' : `c-${winner!.id} (${winner!.strategy})`;
+
+  log.ok(`  Winner: ${sourceLabel} — score ${winner!.verificationScore}, $${winner!.cost.toFixed(2)}${winnerDiffLines !== undefined ? `, ${winnerDiffLines} diff lines` : ""}`);
+
+  // --- Apply changes to main working tree ---
+  log.info(`  Applying ${synthesisWon ? 'synthesis' : "winner's"} changes...`);
+
+  if (sourcePath) {
+    const changedFiles = await getWorktreeChangedFiles(sourcePath);
+    if (changedFiles.length === 0) {
+      log.warn(`  ${synthesisWon ? 'Synthesis' : 'Winner'} has no changed files`);
+    } else {
+      for (const file of changedFiles) {
+        const srcPath = join(sourcePath, file);
+        const destPath = join(projectRoot, file);
+        const destDir = join(projectRoot, file, "..");
+        mkdirSync(resolve(destDir), { recursive: true });
+        if (existsSync(srcPath)) {
+          cpSync(srcPath, destPath, { force: true });
+        }
+      }
+      log.ok(`  Applied ${changedFiles.length} files from ${synthesisWon ? 'synthesis' : 'winner'}`);
+    }
   }
 
   // --- Cleanup worktrees and temp directory ---
+  if (synthWorktreePath) {
+    await removeWorktree(projectRoot, synthWorktreePath).catch(() => {});
+  }
   for (const wt of worktrees) {
     await removeWorktree(projectRoot, wt.path);
   }
   try { rmSync(tournamentDir, { recursive: true, force: true }); } catch { /* ignore */ }
 
-  const totalCost = competitorResults.reduce((s, c) => s + c.cost, 0);
+  const synthesisCost = synthesisMetadata?.synthesis_result?.cost ?? 0;
+  const totalCost = competitorResults.reduce((s, c) => s + c.cost, 0) + synthesisCost;
 
   const tournamentResult: TournamentResult = {
-    winnerId: winner.id,
-    winnerStrategy: winner.strategy,
+    winnerId: winner!.id,
+    winnerStrategy: synthesisWon ? 'synthesis' : winner!.strategy,
     competitors: competitorResults,
     convergenceAnalysis,
     judgeRationale,
+    synthesis: synthesisMetadata,
     totalCost,
   };
 

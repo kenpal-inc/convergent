@@ -280,13 +280,14 @@ export async function generateSummaryReport(
     if (tasksWithMetrics.length > 0) {
       lines.push('## Tournament Results');
       lines.push('');
-      lines.push('| Task | Competitors | Succeeded | Winner | Score | Convergence | Diff Lines |');
-      lines.push('|------|-------------|-----------|--------|-------|-------------|------------|');
+      lines.push('| Task | Competitors | Succeeded | Winner | Score | Convergence | Synthesis | Diff Lines |');
+      lines.push('|------|-------------|-----------|--------|-------|-------------|-----------|------------|');
 
       for (const { id, metrics: m } of tasksWithMetrics) {
         const conv = m.convergence_ratio !== undefined ? `${(m.convergence_ratio * 100).toFixed(0)}%` : '-';
         const diffLines = m.diff_lines_winner !== undefined ? String(m.diff_lines_winner) : '-';
-        lines.push(`| ${id} | ${m.competitors_count} | ${m.implementations_succeeded} | ${m.winner_strategy} | ${m.winner_score} | ${conv} | ${diffLines} |`);
+        const synth = m.synthesis_attempted ? (m.synthesis_succeeded ? '✓ used' : '✗ fell back') : '-';
+        lines.push(`| ${id} | ${m.competitors_count} | ${m.implementations_succeeded} | ${m.winner_strategy} | ${m.winner_score} | ${conv} | ${synth} | ${diffLines} |`);
       }
 
       const avgScore = tasksWithMetrics.reduce((s, t) => s + t.metrics.winner_score, 0) / tasksWithMetrics.length;

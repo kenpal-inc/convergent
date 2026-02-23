@@ -1,5 +1,8 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
-import type { Task, Config, SemanticConvergenceAnalysis } from '../src/types';
+import { describe, it, expect, mock, beforeEach, beforeAll, afterAll } from 'bun:test';
+import { mkdirSync, writeFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import type { Task, Config, SemanticConvergenceAnalysis, ConvergenceAnalysis } from '../src/types';
 
 // --- Mocks (set up BEFORE importing function under test) ---
 
@@ -55,7 +58,7 @@ mock.module('../src/learnings', () => ({
 }));
 
 // Import after mocks are registered
-import { synthesizeImplementation } from '../src/tournament';
+import { synthesizeImplementation, analyzeSemanticConvergence, runTournament } from '../src/tournament';
 
 // --- Test Fixtures ---
 
@@ -298,5 +301,476 @@ describe('synthesizeImplementation', () => {
     expect(prompt).toContain('[truncated]');
     // Prompt should be significantly less than 50K for the diff portion
     expect(prompt.length).toBeLessThan(50_000);
+  });
+});
+
+// --- analyzeSemanticConvergence tests ---
+
+const baseConvergenceAnalysis: ConvergenceAnalysis = {
+  convergence_ratio: 0.8,
+  common_files: ['src/feature.ts'],
+  divergent_files: ['src/utils.ts'],
+  diff_lines: { 0: 50, 1: 60 },
+};
+
+describe('analyzeSemanticConvergence', () => {
+  beforeEach(() => {
+    mockCallClaude.mockReset();
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+  });
+
+  it('returns synthesis_viable=false when callClaude returns is_error', async () => {
+    mockCallClaude.mockResolvedValue({
+      type: 'result',
+      subtype: 'error',
+      is_error: true,
+      result: 'API rate limit exceeded',
+      total_cost_usd: 0.1,
+    });
+
+    const result = await analyzeSemanticConvergence(
+      baseTask, baseCandidates, baseConfig, taskDir, baseConvergenceAnalysis,
+    );
+
+    expect(result.synthesis_viable).toBe(false);
+    expect(result.rationale).toBeTruthy();
+    expect(result.rationale).toContain('failed');
+    expect(result.convergent_patterns).toEqual([]);
+  });
+
+  it('correctly parses a valid JSON response with convergent_patterns, divergent_approaches, synthesis_viable, rationale', async () => {
+    const validResponse = JSON.stringify({
+      convergent_patterns: [
+        { pattern: 'Both use middleware pattern', competitors: [0, 1], confidence: 0.9 },
+      ],
+      divergent_approaches: ['Different error handling strategies'],
+      synthesis_viable: true,
+      rationale: 'Strong convergence on core design',
+    });
+
+    mockCallClaude.mockResolvedValue({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: validResponse,
+      total_cost_usd: 0.3,
+    });
+
+    const result = await analyzeSemanticConvergence(
+      baseTask, baseCandidates, baseConfig, taskDir, baseConvergenceAnalysis,
+    );
+
+    expect(result.synthesis_viable).toBe(true);
+    expect(result.rationale).toBe('Strong convergence on core design');
+    expect(result.convergent_patterns).toHaveLength(1);
+    expect(result.convergent_patterns[0].pattern).toBe('Both use middleware pattern');
+    expect(result.convergent_patterns[0].confidence).toBe(0.9);
+    expect(result.convergent_patterns[0].competitors).toEqual([0, 1]);
+    expect(result.divergent_approaches).toEqual(['Different error handling strategies']);
+  });
+
+  it('handles malformed JSON gracefully — returns fallback', async () => {
+    mockCallClaude.mockResolvedValue({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: 'This is not valid JSON at all { broken',
+      total_cost_usd: 0.2,
+    });
+
+    const result = await analyzeSemanticConvergence(
+      baseTask, baseCandidates, baseConfig, taskDir, baseConvergenceAnalysis,
+    );
+
+    expect(result.synthesis_viable).toBe(false);
+    expect(result.convergent_patterns).toEqual([]);
+    expect(result.rationale).toContain('error');
+  });
+
+  it('strips markdown code fences from response before parsing', async () => {
+    const jsonContent = JSON.stringify({
+      convergent_patterns: [
+        { pattern: 'Shared API design', competitors: [0, 1], confidence: 0.85 },
+      ],
+      divergent_approaches: [],
+      synthesis_viable: true,
+      rationale: 'Good convergence',
+    });
+    const wrappedResponse = '```json\n' + jsonContent + '\n```';
+
+    mockCallClaude.mockResolvedValue({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: wrappedResponse,
+      total_cost_usd: 0.25,
+    });
+
+    const result = await analyzeSemanticConvergence(
+      baseTask, baseCandidates, baseConfig, taskDir, baseConvergenceAnalysis,
+    );
+
+    expect(result.synthesis_viable).toBe(true);
+    expect(result.convergent_patterns).toHaveLength(1);
+    expect(result.convergent_patterns[0].pattern).toBe('Shared API design');
+  });
+});
+
+// --- Synthesis score comparison and integration tests ---
+
+describe('synthesis score comparison', () => {
+  beforeEach(() => {
+    mockCreateWorktree.mockReset();
+    mockCreateWorktree.mockResolvedValue(true);
+    mockGetWorktreeChangedFiles.mockReset();
+    mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
+    mockGetWorktreeDiff.mockReset();
+    mockGetWorktreeDiff.mockResolvedValue('diff content');
+    mockCallClaude.mockReset();
+    mockCallClaude.mockResolvedValue({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: 'Synthesis done',
+      total_cost_usd: 1.5,
+    });
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+    mockResolveVerificationCommands.mockReset();
+    mockResolveVerificationCommands.mockReturnValue(['bun test']);
+    mockScoreVerification.mockReset();
+  });
+
+  it('synthesis score equal to best individual — synthesis should be used', async () => {
+    // Synthesis scores exactly equal to best individual (80) => should succeed (>=)
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 80,
+      maxScore: 100,
+      allPassed: false,
+      details: [],
+    });
+
+    const result = await synthesizeImplementation(
+      baseTask, baseCandidates, baseSemanticAnalysis,
+      baseConfig, projectRoot, tournamentDir, taskDir, baseCommit,
+    );
+
+    // Synthesis succeeds when score >= best individual
+    expect(result.success).toBe(true);
+    expect(result.verification_score).toBe(80);
+  });
+
+  it('synthesis score below best — synthesis should fall back (score 0)', async () => {
+    // Synthesis fails verification entirely
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 0,
+      maxScore: 100,
+      allPassed: false,
+      details: [],
+    });
+
+    const result = await synthesizeImplementation(
+      baseTask, baseCandidates, baseSemanticAnalysis,
+      baseConfig, projectRoot, tournamentDir, taskDir, baseCommit,
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.verification_score).toBe(0);
+  });
+});
+
+describe('SynthesisMetadata integration', () => {
+  beforeEach(() => {
+    mockCreateWorktree.mockReset();
+    mockCreateWorktree.mockResolvedValue(true);
+    mockGetWorktreeChangedFiles.mockReset();
+    mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
+    mockGetWorktreeDiff.mockReset();
+    mockGetWorktreeDiff.mockResolvedValue('diff content');
+    mockCallClaude.mockReset();
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+    mockResolveVerificationCommands.mockReset();
+    mockResolveVerificationCommands.mockReturnValue(['bun test']);
+    mockScoreVerification.mockReset();
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 80,
+      maxScore: 100,
+      allPassed: false,
+      details: [],
+    });
+  });
+
+  it('synthesis worktree is cleaned up even when synthesis throws an error', async () => {
+    // Simulate synthesis worktree created but then Claude call throws
+    mockCallClaude.mockRejectedValue(new Error('Catastrophic failure'));
+
+    const result = await synthesizeImplementation(
+      baseTask, baseCandidates, baseSemanticAnalysis,
+      baseConfig, projectRoot, tournamentDir, taskDir, baseCommit,
+    );
+
+    // Should not throw
+    expect(result.success).toBe(false);
+    expect(result.rationale).toContain('Catastrophic failure');
+    // worktreePath is set so caller knows it existed (even though the function never throws)
+    expect(result.worktreePath).toBeDefined();
+  });
+});
+
+// --- runTournament integration tests ---
+
+// Shared temp directory for competitors.json
+let testLibDir: string;
+let testOutputDir: string;
+
+beforeAll(() => {
+  testLibDir = join(tmpdir(), `convergent-test-lib-${Date.now()}`);
+  mkdirSync(testLibDir, { recursive: true });
+  writeFileSync(
+    join(testLibDir, 'competitors.json'),
+    JSON.stringify({
+      pragmatist: { name: 'Pragmatist', system_prompt: 'You are a pragmatist.' },
+      thorough: { name: 'Thorough', system_prompt: 'You are thorough.' },
+      deconstructor: { name: 'Deconstructor', system_prompt: 'You deconstruct.' },
+    }),
+  );
+  testOutputDir = join(tmpdir(), `convergent-test-output-${Date.now()}`);
+  mkdirSync(testOutputDir, { recursive: true });
+});
+
+afterAll(() => {
+  try { rmSync(testLibDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  try { rmSync(testOutputDir, { recursive: true, force: true }); } catch { /* ignore */ }
+});
+
+describe('runTournament integration — single competitor', () => {
+  beforeEach(() => {
+    mockCreateWorktree.mockReset();
+    mockCreateWorktree.mockResolvedValue(true);
+    mockGetWorktreeChangedFiles.mockReset();
+    mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
+    mockGetWorktreeDiff.mockReset();
+    mockGetWorktreeDiff.mockResolvedValue('diff --git a/file1.ts\n+added');
+    mockRemoveWorktree.mockReset();
+    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockCallClaude.mockReset();
+    mockCallClaude.mockResolvedValue({
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      result: 'Implementation done',
+      total_cost_usd: 1.0,
+    });
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+    mockResolveVerificationCommands.mockReset();
+    mockResolveVerificationCommands.mockReturnValue(['bun test']);
+    mockScoreVerification.mockReset();
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 80,
+      maxScore: 100,
+      allPassed: false,
+      details: [{ name: 'bun test', passed: true, weight: 1 }],
+    });
+  });
+
+  it('existing single-competitor tournament path still works (no synthesis attempted when only 1 candidate)', async () => {
+    const trivialTask: Task = {
+      ...baseTask,
+      estimated_complexity: 'trivial',
+    };
+
+    const result = await runTournament(
+      'test-single', trivialTask, baseConfig, projectRoot,
+      testOutputDir, testLibDir, baseCommit,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.competitors).toHaveLength(1);
+    expect(result!.winnerId).toBe(0);
+    // Synthesis should not be attempted with only 1 candidate
+    expect(result!.synthesis).toBeDefined();
+    expect(result!.synthesis!.attempted).toBe(false);
+    expect(result!.synthesis!.fell_back_to_winner).toBe(true);
+    expect(result!.synthesis!.rationale).toContain('synthesis requires 2+');
+  });
+});
+
+describe('runTournament integration — convergence below threshold', () => {
+  beforeEach(() => {
+    mockCreateWorktree.mockReset();
+    mockCreateWorktree.mockResolvedValue(true);
+    mockRemoveWorktree.mockReset();
+    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+    mockResolveVerificationCommands.mockReset();
+    mockResolveVerificationCommands.mockReturnValue(['bun test']);
+    mockScoreVerification.mockReset();
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 80,
+      maxScore: 100,
+      allPassed: false,
+      details: [{ name: 'bun test', passed: true, weight: 1 }],
+    });
+
+    // Each competitor changes different files → low convergence_ratio
+    mockGetWorktreeChangedFiles.mockReset();
+    mockGetWorktreeChangedFiles.mockImplementation(async (path: string) => {
+      if (path.includes('c-0')) return ['file1.ts'];
+      if (path.includes('c-1')) return ['file2.ts'];
+      return ['file1.ts'];
+    });
+    mockGetWorktreeDiff.mockReset();
+    mockGetWorktreeDiff.mockImplementation(async (path: string) => {
+      if (path.includes('c-0')) return 'diff --git a/file1.ts\n+line1';
+      if (path.includes('c-1')) return 'diff --git a/file2.ts\n+line2';
+      return 'diff content';
+    });
+
+    // callClaude: first 2 calls = competitor implementations, 3rd = judge
+    let callCount = 0;
+    mockCallClaude.mockReset();
+    mockCallClaude.mockImplementation(async () => {
+      callCount++;
+      if (callCount <= 2) {
+        return {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: 'Implementation done',
+          total_cost_usd: 1.0,
+        };
+      }
+      // Judge response
+      return {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: JSON.stringify({ winner: 0, rationale: 'Better implementation' }),
+        total_cost_usd: 0.3,
+      };
+    });
+  });
+
+  it('SynthesisMetadata is correctly populated with attempted=false when convergence_ratio < threshold', async () => {
+    const standardTask: Task = {
+      ...baseTask,
+      estimated_complexity: 'standard',
+    };
+    const configWithHighThreshold = {
+      ...baseConfig,
+      tournament: { ...baseConfig.tournament, convergence_threshold: 0.9 },
+    } as Config;
+
+    const result = await runTournament(
+      'test-low-conv', standardTask, configWithHighThreshold, projectRoot,
+      testOutputDir, testLibDir, baseCommit,
+    );
+
+    expect(result).not.toBeNull();
+    // Convergence ratio should be 0 (no common files between competitors)
+    expect(result!.convergenceAnalysis).toBeDefined();
+    expect(result!.convergenceAnalysis!.convergence_ratio).toBe(0);
+    // Synthesis should not be attempted
+    expect(result!.synthesis).toBeDefined();
+    expect(result!.synthesis!.attempted).toBe(false);
+    expect(result!.synthesis!.succeeded).toBe(false);
+    expect(result!.synthesis!.fell_back_to_winner).toBe(true);
+    expect(result!.synthesis!.rationale).toContain('below threshold');
+  });
+});
+
+describe('runTournament integration — synthesis field present', () => {
+  beforeEach(() => {
+    mockCreateWorktree.mockReset();
+    mockCreateWorktree.mockResolvedValue(true);
+    mockRemoveWorktree.mockReset();
+    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockRecordCost.mockReset();
+    mockRecordCost.mockResolvedValue(undefined);
+    mockResolveVerificationCommands.mockReset();
+    mockResolveVerificationCommands.mockReturnValue(['bun test']);
+    mockScoreVerification.mockReset();
+    mockScoreVerification.mockResolvedValue({
+      totalScore: 80,
+      maxScore: 100,
+      allPassed: false,
+      details: [{ name: 'bun test', passed: true, weight: 1 }],
+    });
+
+    // Both competitors change the same files → high convergence
+    mockGetWorktreeChangedFiles.mockReset();
+    mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
+    mockGetWorktreeDiff.mockReset();
+    mockGetWorktreeDiff.mockResolvedValue('diff --git a/file1.ts\n+added');
+
+    // callClaude: 2 implementations, then semantic analysis, then synthesis, then potentially judge
+    let callCount = 0;
+    mockCallClaude.mockReset();
+    mockCallClaude.mockImplementation(async () => {
+      callCount++;
+      if (callCount <= 2) {
+        // Competitor implementations
+        return {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: 'Implementation done',
+          total_cost_usd: 1.0,
+        };
+      }
+      if (callCount === 3) {
+        // Semantic convergence analysis
+        return {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          result: JSON.stringify({
+            convergent_patterns: [{ pattern: 'Shared approach', competitors: [0, 1], confidence: 0.9 }],
+            divergent_approaches: [],
+            synthesis_viable: true,
+            rationale: 'High convergence',
+          }),
+          total_cost_usd: 0.3,
+        };
+      }
+      // Synthesis implementation call
+      return {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: 'Synthesis done',
+        total_cost_usd: 1.5,
+      };
+    });
+  });
+
+  it('TournamentResult includes synthesis field after tournament with 2+ passing competitors', async () => {
+    const standardTask: Task = {
+      ...baseTask,
+      estimated_complexity: 'standard',
+    };
+    const configWithLowThreshold = {
+      ...baseConfig,
+      tournament: { ...baseConfig.tournament, convergence_threshold: 0.5 },
+    } as Config;
+
+    const result = await runTournament(
+      'test-synth', standardTask, configWithLowThreshold, projectRoot,
+      testOutputDir, testLibDir, baseCommit,
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.competitors.length).toBeGreaterThanOrEqual(2);
+    // Synthesis field should be present
+    expect(result!.synthesis).toBeDefined();
+    // Synthesis should have been attempted (convergence is 100% — same files)
+    expect(result!.synthesis!.attempted).toBe(true);
+    // Synthesis result should include semantic analysis
+    expect(result!.synthesis!.semantic_analysis).toBeDefined();
+    expect(result!.synthesis!.semantic_analysis!.convergent_patterns.length).toBeGreaterThan(0);
   });
 });

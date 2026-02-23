@@ -660,6 +660,8 @@ async function main(): Promise<void> {
         score_spread: scoreSpread,
         convergence_ratio: ca?.convergence_ratio,
         diff_lines_winner: ca?.diff_lines[tournamentResult.winnerId],
+        synthesis_attempted: tournamentResult.synthesis?.attempted,
+        synthesis_succeeded: tournamentResult.synthesis?.succeeded,
       };
       await recordTournamentMetrics(task.id, tournamentMetrics);
 
@@ -667,6 +669,9 @@ async function main(): Promise<void> {
       log.info(`Tournament: ${tournamentMetrics.implementations_succeeded}/${tournamentMetrics.competitors_count} succeeded, winner=${tournamentResult.winnerStrategy} (score ${tournamentMetrics.winner_score}${convergenceInfo})`);
       if (tournamentResult.judgeRationale) {
         log.info(`Judge: ${tournamentResult.judgeRationale}`);
+      }
+      if (tournamentResult.synthesis?.attempted) {
+        log.info(`Synthesis: ${tournamentResult.synthesis.succeeded ? 'succeeded' : 'fell back to winner'} — ${tournamentResult.synthesis.rationale}`);
       }
 
       // Verify winner's changes in the main working tree
