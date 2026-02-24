@@ -353,6 +353,12 @@ async function main(): Promise<void> {
     outputDir = resolve(runsDir, runId);
     mkdirSync(outputDir, { recursive: true });
 
+    // Ensure .convergent/.gitignore exists so the directory is never committed
+    const innerGitignore = resolve(baseDir, ".gitignore");
+    if (!existsSync(innerGitignore)) {
+      await Bun.write(innerGitignore, "*\n");
+    }
+
     // Update latest symlink
     try {
       if (existsSync(latestLink)) unlinkSync(latestLink);
