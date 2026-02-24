@@ -5,6 +5,31 @@ import type { Config } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * Ensure dependencies are installed if package.json exists but node_modules doesn't.
+ * Worktree competitors run `bun install` themselves, but the main tree doesn't —
+ * this fills the gap so verification commands (tsc, lint) can actually resolve imports.
+ */
+export async function ensureDependencies(projectRoot: string): Promise<void> {
+  const pkgPath = join(projectRoot, "package.json");
+  const nodeModulesPath = join(projectRoot, "node_modules");
+  if (!existsSync(pkgPath) || existsSync(nodeModulesPath)) return;
+
+  log.info("  Installing dependencies (node_modules missing)...");
+  const proc = Bun.spawn(["bun", "install"], {
+    cwd: projectRoot,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
+  if (proc.exitCode === 0) {
+    log.ok("  Dependencies installed");
+  } else {
+    const stderr = await new Response(proc.stderr).text();
+    log.warn(`  bun install failed (exit ${proc.exitCode}): ${stderr.slice(0, 200)}`);
+  }
+}
+
 interface CommandResult {
   cmd: string;
   passed: boolean;
@@ -119,6 +144,8 @@ export async function runVerification(
   mkdirSync(taskDir, { recursive: true });
   const verifyLogPath = `${taskDir}/verify.log`;
 
+  await ensureDependencies(projectRoot);
+
   log.info("Running verification...");
 
   const timeoutMs = (config.verification.timeout_seconds ?? 300) * 1000 || DEFAULT_TIMEOUT_MS;
@@ -217,6 +244,8 @@ export async function scoreVerification(
   if (commands.length === 0) {
     return { totalScore: 100, maxScore: 100, allPassed: true, details: [] };
   }
+
+  await ensureDependencies(projectRoot);
 
   const results = await Promise.all(
     commands.map(cmd => runCommand(cmd, projectRoot, timeoutMs)),

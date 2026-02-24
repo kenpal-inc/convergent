@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.5.0] - 2026-02-24
+
+### Added
+- **Auto dependency install**: Automatically runs `bun install` before verification when `package.json` exists but `node_modules` is missing — fixes the gap where worktree competitors install dependencies but the main tree doesn't
+- **Requirements coverage check**: After Phase 0 generates the task queue, an AI analyst compares it against the user's instructions to detect missing requirements. If gaps are found, the task queue is automatically regenerated to include them
+- **`.convergent/.gitignore`**: The `.convergent/` directory now contains its own `*` gitignore on first run, providing defense-in-depth against accidental commits
+
+### Changed
+- Landing page (EN/JA): Toned down convergent evolution claims — "optimal" → "robust", "applies this directly" → "inspired by this phenomenon"
+
+### Fixed
+- **Phase F diagnosis budget exhaustion**: Removed tools (Read/Glob/Grep) from diagnosis call — the AI was spending 16 turns reading files, exceeding $0.50 budget before producing output. Diagnosis is a pure classification task with file list + verification errors already in the prompt
+- **Greenfield `git init`**: Auto-initialize git repository when no `.git` directory exists (previously assumed repo existed)
+
 ## [2.4.0] - 2026-02-24
 
 ### Added

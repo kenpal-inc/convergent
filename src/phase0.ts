@@ -180,6 +180,16 @@ export async function generateTaskQueue(
     }
   }
 
+  // Requirements coverage check: verify generated tasks cover all instruction items
+  if (instructions) {
+    const coveredTasks = await checkRequirementsCoverage(
+      instructions, taskQueue, schema, config, outputDir,
+    );
+    if (coveredTasks) {
+      taskQueue.tasks = coveredTasks;
+    }
+  }
+
   await Bun.write(`${outputDir}/tasks.json`, JSON.stringify(taskQueue, null, 2));
 
   log.ok(`Generated ${taskQueue.tasks.length} tasks`);
@@ -336,4 +346,124 @@ async function regenerateTaskQueue(
   }
 
   return structured;
+}
+
+// --- Requirements coverage check ---
+
+const COVERAGE_SCHEMA = {
+  type: "object",
+  properties: {
+    covered: {
+      type: "array",
+      items: { type: "string" },
+      description: "List of instruction requirements that ARE covered by the task queue",
+    },
+    missing: {
+      type: "array",
+      items: { type: "string" },
+      description: "List of instruction requirements that are NOT covered by any task",
+    },
+  },
+  required: ["covered", "missing"],
+};
+
+type CoverageResult = {
+  covered: string[];
+  missing: string[];
+};
+
+/**
+ * Check that the generated task queue covers all requirements from the user's instructions.
+ * If gaps are found, regenerate with explicit instructions to include the missing items.
+ * Returns updated tasks if regeneration happened, null otherwise.
+ */
+async function checkRequirementsCoverage(
+  instructions: string,
+  taskQueue: TaskQueue,
+  taskSchema: object,
+  config: Config,
+  outputDir: string,
+): Promise<Task[] | null> {
+  const taskSummary = taskQueue.tasks
+    .map(t => `- ${t.id}: ${t.title}\n  ${t.description}`)
+    .join("\n");
+
+  const prompt = `## User Instructions
+${instructions}
+
+## Generated Task Queue
+${taskSummary}
+
+## Task
+Compare the user's instructions against the generated task queue. Identify every distinct functional requirement in the instructions (numbered items, bullet points, or described features). For each requirement, determine whether it is covered by at least one task in the queue.
+
+A requirement is "covered" if a task's title or description clearly addresses it. It is "missing" if no task addresses it.
+
+Be strict: if the instructions say "Fixed cost CRUD" and no task creates a UI for managing fixed costs, that is missing (even if an API-only task exists).`;
+
+  const response = await callClaude({
+    prompt,
+    systemPrompt: "You are a QA analyst checking that a task plan fully covers a requirements specification. Be thorough and precise.",
+    model: config.models.planner,
+    maxBudgetUsd: 0.5,
+    jsonSchema: COVERAGE_SCHEMA,
+    tools: "",
+    logFile: `${outputDir}/logs/phase0/coverage.log`,
+  });
+
+  await recordCost("phase0-coverage", response.total_cost_usd ?? 0);
+
+  const structured = getStructuredOutput<CoverageResult>(response);
+  if (!structured?.missing) return null;
+
+  if (structured.missing.length === 0) {
+    log.ok(`Requirements coverage: ${structured.covered.length}/${structured.covered.length} covered`);
+    return null;
+  }
+
+  // Found gaps — regenerate with explicit missing items
+  log.warn(`Requirements coverage: ${structured.missing.length} gap(s) found:`);
+  for (const item of structured.missing) {
+    log.warn(`  - ${item}`);
+  }
+
+  log.info("Regenerating task queue to cover missing requirements...");
+  const missingList = structured.missing.map(m => `- ${m}`).join("\n");
+
+  const regenPrompt = `## Current Task Queue
+${JSON.stringify(taskQueue, null, 2)}
+
+## Missing Requirements
+The following requirements from the user's instructions are NOT covered by any task:
+${missingList}
+
+## Instructions
+Add tasks to cover ALL of the missing requirements listed above. You may merge them into existing tasks if appropriate, or create new tasks. Return the complete task queue (existing + new tasks) with valid depends_on references.`;
+
+  const regenResponse = await callClaude({
+    prompt: regenPrompt,
+    systemPrompt: SYSTEM_PROMPT,
+    model: config.models.planner,
+    maxBudgetUsd: config.budget.per_task_max_usd,
+    jsonSchema: taskSchema,
+    tools: "",
+    logFile: `${outputDir}/logs/phase0/coverage_regen.log`,
+  });
+
+  await recordCost("phase0-coverage-regen", regenResponse.total_cost_usd ?? 0);
+
+  const regen = getStructuredOutput<{ tasks: Task[] }>(regenResponse);
+  if (!regen?.tasks) {
+    log.warn("Coverage regeneration failed — proceeding with original tasks");
+    return null;
+  }
+
+  const errors = validateTaskQueue(regen.tasks);
+  if (errors.length > 0) {
+    log.warn(`Coverage regeneration produced invalid tasks: ${errors.join(", ")}`);
+    return null;
+  }
+
+  log.ok(`Task queue updated: ${taskQueue.tasks.length} → ${regen.tasks.length} tasks`);
+  return regen.tasks;
 }
