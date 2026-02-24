@@ -421,9 +421,17 @@ async function main(): Promise<void> {
     log.info("Created .gitignore with common defaults (greenfield project detected)");
   }
 
-  // Ensure at least one commit exists — worktree creation requires a valid HEAD.
-  // Greenfield repos (git init with no commits) have an invalid HEAD reference.
+  // Ensure a git repo with at least one commit — worktree creation requires valid HEAD.
   {
+    const isGitRepo = Bun.spawnSync(["git", "rev-parse", "--git-dir"], {
+      cwd: projectRoot,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    if (isGitRepo.exitCode !== 0) {
+      Bun.spawnSync(["git", "init"], { cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
+      log.info("Initialized git repository (greenfield project)");
+    }
     const headCheck = Bun.spawnSync(["git", "rev-parse", "HEAD"], {
       cwd: projectRoot,
       stdout: "pipe",
