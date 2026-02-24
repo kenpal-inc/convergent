@@ -28,7 +28,7 @@ import { recordReviewLearning, recordFailureLearning } from "./src/learnings";
 import { runIntegrationCheck } from "./src/phaseF";
 import type { CliArgs, Config, Task, TaskQueue, TournamentMetrics } from "./src/types";
 
-const VERSION = "2.4.0";
+const VERSION = "2.5.0";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const LIB_DIR = resolve(SCRIPT_DIR, "lib");
 const TEMPLATES_DIR = resolve(SCRIPT_DIR, "templates");
