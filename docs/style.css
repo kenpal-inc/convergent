@@ -609,6 +609,42 @@ code {
 .syn-cmd { color: var(--text-primary); }
 
 /* ========================================
+   Prerequisites
+   ======================================== */
+.prereq {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px 24px 24px 20px;
+}
+
+.prereq h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.prereq ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.prereq li {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+
+.prereq a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.prereq a:hover {
+  text-decoration: underline;
+}
+
+/* ========================================
    Output Section
    ======================================== */
 .output-tree {
