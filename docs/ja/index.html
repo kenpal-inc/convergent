@@ -121,7 +121,7 @@
             <div class="phase-label">Phase 0</div>
             <div class="phase-icon">&#128466;</div>
             <h3>Task Generation</h3>
-            <p>コードベースとゴールを解析し、依存関係グラフ付きのタスクキューを生成します。タスク種別: code, explore, command</p>
+            <p>コードベースとゴールを解析し、依存関係グラフ付きのタスクキューを生成します。指示に対する網羅性を検証し、漏れがあれば再生成します。</p>
           </div>
           <div class="phase-card fade-in">
             <div class="phase-label">Phase T</div>
@@ -266,15 +266,16 @@
 
         <div class="output-tree fade-in" style="margin-top: 40px;">
           <h3 style="margin-bottom: 16px;">コストプロファイル（実測値）</h3>
-          <pre>課題: MQ会計ダッシュボード — フルスタック新規開発
-技術スタック: Next.js App Router + Prisma + Tailwind + shadcn/ui + Recharts
+          <pre>同じ要件、異なるスタック — 同等の品質。
 
-生成タスク数:         7
-合計コスト:           $36.92
-実行時間:             約83分
-戦略数/タスク:        1 (trivial) / 2 (standard) / 3 (complex)
-Synthesis勝利:       7ラウンド中3回
-Phase F自動修正:     5件の問題を検出＆修正（$0.33）</pre>
+Run 1: Next.js App Router + Prisma + Tailwind + shadcn/ui
+  タスク: 7  |  コスト: $36.92  |  時間: 約83分  |  Synthesis勝利: 3/7
+
+Run 2: TanStack Start + Drizzle + Tailwind + shadcn/ui
+  タスク: 7  |  コスト: $36.64  |  時間: 約90分  |  Synthesis勝利: 4/6
+
+Phase F自動修正:  各ランで5-6件の問題を検出＆修正
+戦略数/タスク:     1 (trivial) / 2 (standard) / 3 (complex)</pre>
         </div>
       </div>
     </section>
@@ -296,26 +297,22 @@ Phase F自動修正:     5件の問題を検出＆修正（$0.33）</pre>
         <div class="code-block fade-in">
           <div class="code-header">
             <span class="code-lang">bash</span>
-            <button class="copy-btn" data-copy='convergent \
-  --context "src/,docs/" \
-  --goal "Implement user authentication with JWT tokens"'>Copy</button>
+            <button class="copy-btn" data-copy='convergent "JWT認証とロールベースのアクセス制御を追加してください"'>Copy</button>
           </div>
-          <pre><code><span class="syn-comment"># プロジェクトで実行</span>
-<span class="syn-cmd">convergent</span> \
-  <span class="syn-flag">--context</span> <span class="syn-string">"src/,docs/"</span> \
-  <span class="syn-flag">--goal</span> <span class="syn-string">"Implement user authentication with JWT tokens"</span></code></pre>
+          <pre><code><span class="syn-comment"># やりたいことを書くだけ</span>
+<span class="syn-cmd">convergent</span> <span class="syn-string">"JWT認証とロールベースのアクセス制御を追加してください"</span></code></pre>
         </div>
 
         <div class="code-block fade-in">
           <div class="code-header">
             <span class="code-lang">bash</span>
-            <button class="copy-btn" data-copy='convergent --context "src/" --goal "Fix type errors" --review
-convergent --refine "Remove task-001, add E2E tests to task-003"
+            <button class="copy-btn" data-copy='convergent --review "JWT認証を追加"
+convergent --refine "task-002をサインアップとログインに分割"
 convergent --resume'>Copy</button>
           </div>
-          <pre><code><span class="syn-comment"># レビュー → 修正 → 実行 ワークフロー</span>
-<span class="syn-cmd">convergent</span> <span class="syn-flag">--context</span> <span class="syn-string">"src/"</span> <span class="syn-flag">--goal</span> <span class="syn-string">"Fix type errors"</span> <span class="syn-flag">--review</span>
-<span class="syn-cmd">convergent</span> <span class="syn-flag">--refine</span> <span class="syn-string">"Remove task-001, add E2E tests to task-003"</span>
+          <pre><code><span class="syn-comment"># プランを確認してから実行することもできます</span>
+<span class="syn-cmd">convergent</span> <span class="syn-flag">--review</span> <span class="syn-string">"JWT認証を追加"</span>
+<span class="syn-cmd">convergent</span> <span class="syn-flag">--refine</span> <span class="syn-string">"task-002をサインアップとログインに分割"</span>
 <span class="syn-cmd">convergent</span> <span class="syn-flag">--resume</span></code></pre>
         </div>
       </div>

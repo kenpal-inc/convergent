@@ -113,7 +113,7 @@
             <div class="phase-label">Phase 0</div>
             <div class="phase-icon">&#128466;</div>
             <h3>Task Generation</h3>
-            <p>Analyzes your codebase and goal, decomposes into a structured task queue with dependency graph. Assigns types: code, explore, or command.</p>
+            <p>Analyzes your codebase and goal, decomposes into a structured task queue with dependency graph. Validates coverage against requirements &mdash; regenerates if gaps are found.</p>
           </div>
           <div class="phase-card fade-in">
             <div class="phase-label">Phase T</div>
@@ -258,15 +258,16 @@
 
         <div class="output-tree fade-in" style="margin-top: 40px;">
           <h3 style="margin-bottom: 16px;">Cost Profile (real-world benchmark)</h3>
-          <pre>Task: MQ accounting dashboard — full-stack greenfield
-Stack: Next.js App Router + Prisma + Tailwind + shadcn/ui + Recharts
+          <pre>Same requirements, different stacks — same result quality.
 
-Tasks generated:    7
-Total cost:         $36.92
-Wall clock time:    ~83 min
-Strategies/task:    1 (trivial) / 2 (standard) / 3 (complex)
-Synthesis won:      3 of 7 rounds
-Phase F auto-fix:   5 issues diagnosed &amp; repaired ($0.33)</pre>
+Run 1: Next.js App Router + Prisma + Tailwind + shadcn/ui
+  Tasks: 7  |  Cost: $36.92  |  Time: ~83 min  |  Synthesis won: 3/7
+
+Run 2: TanStack Start + Drizzle + Tailwind + shadcn/ui
+  Tasks: 7  |  Cost: $36.64  |  Time: ~90 min  |  Synthesis won: 4/6
+
+Phase F auto-fix:   5-6 issues diagnosed &amp; repaired per run
+Strategies/task:    1 (trivial) / 2 (standard) / 3 (complex)</pre>
         </div>
       </div>
     </section>
@@ -288,26 +289,22 @@ Phase F auto-fix:   5 issues diagnosed &amp; repaired ($0.33)</pre>
         <div class="code-block fade-in">
           <div class="code-header">
             <span class="code-lang">bash</span>
-            <button class="copy-btn" data-copy='convergent \
-  --context "src/,docs/" \
-  --goal "Implement user authentication with JWT tokens"'>Copy</button>
+            <button class="copy-btn" data-copy='convergent "Add user authentication with JWT tokens and role-based access control"'>Copy</button>
           </div>
-          <pre><code><span class="syn-comment"># Run on your project</span>
-<span class="syn-cmd">convergent</span> \
-  <span class="syn-flag">--context</span> <span class="syn-string">"src/,docs/"</span> \
-  <span class="syn-flag">--goal</span> <span class="syn-string">"Implement user authentication with JWT tokens"</span></code></pre>
+          <pre><code><span class="syn-comment"># Run — just describe what you want</span>
+<span class="syn-cmd">convergent</span> <span class="syn-string">"Add user authentication with JWT tokens and role-based access control"</span></code></pre>
         </div>
 
         <div class="code-block fade-in">
           <div class="code-header">
             <span class="code-lang">bash</span>
-            <button class="copy-btn" data-copy='convergent --context "src/" --goal "Fix type errors" --review
-convergent --refine "Remove task-001, add E2E tests to task-003"
+            <button class="copy-btn" data-copy='convergent --review "Add user authentication"
+convergent --refine "Split task-002 into signup and login"
 convergent --resume'>Copy</button>
           </div>
-          <pre><code><span class="syn-comment"># Review → Refine → Execute workflow</span>
-<span class="syn-cmd">convergent</span> <span class="syn-flag">--context</span> <span class="syn-string">"src/"</span> <span class="syn-flag">--goal</span> <span class="syn-string">"Fix type errors"</span> <span class="syn-flag">--review</span>
-<span class="syn-cmd">convergent</span> <span class="syn-flag">--refine</span> <span class="syn-string">"Remove task-001, add E2E tests to task-003"</span>
+          <pre><code><span class="syn-comment"># Or review the plan first, refine, then execute</span>
+<span class="syn-cmd">convergent</span> <span class="syn-flag">--review</span> <span class="syn-string">"Add user authentication"</span>
+<span class="syn-cmd">convergent</span> <span class="syn-flag">--refine</span> <span class="syn-string">"Split task-002 into signup and login"</span>
 <span class="syn-cmd">convergent</span> <span class="syn-flag">--resume</span></code></pre>
         </div>
       </div>
