@@ -17,10 +17,10 @@ const mockCallClaude = mock(() =>
   }),
 );
 
-const mockCreateWorktree = mock(() => Promise.resolve(true));
+const mockCreateTournamentClone = mock(() => Promise.resolve(true));
 const mockGetWorktreeChangedFiles = mock(() => Promise.resolve(['file1.ts']));
 const mockGetWorktreeDiff = mock(() => Promise.resolve('diff content'));
-const mockRemoveWorktree = mock(() => Promise.resolve());
+const mockRemoveTournamentClone = mock(() => Promise.resolve());
 
 const mockResolveVerificationCommands = mock(() => ['bun test']);
 const mockScoreVerification = mock(() =>
@@ -37,8 +37,8 @@ mock.module('../src/claude', () => ({
 }));
 
 mock.module('../src/git', () => ({
-  createWorktree: mockCreateWorktree,
-  removeWorktree: mockRemoveWorktree,
+  createTournamentClone: mockCreateTournamentClone,
+  removeTournamentClone: mockRemoveTournamentClone,
   getWorktreeChangedFiles: mockGetWorktreeChangedFiles,
   getWorktreeDiff: mockGetWorktreeDiff,
 }));
@@ -106,8 +106,8 @@ const baseCommit = 'abc123';
 
 describe('synthesizeImplementation', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
     mockGetWorktreeChangedFiles.mockReset();
     mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
     mockGetWorktreeDiff.mockReset();
@@ -153,21 +153,21 @@ describe('synthesizeImplementation', () => {
       baseTask, baseCandidates, baseSemanticAnalysis,
       baseConfig, projectRoot, tournamentDir, taskDir, baseCommit,
     );
-    expect(mockCreateWorktree).toHaveBeenCalledWith(
+    expect(mockCreateTournamentClone).toHaveBeenCalledWith(
       projectRoot,
       expect.stringContaining('synthesis'),
       baseCommit,
     );
   });
 
-  it('returns success=false when createWorktree fails, without worktreePath', async () => {
-    mockCreateWorktree.mockResolvedValue(false);
+  it('returns success=false when createTournamentClone fails, without worktreePath', async () => {
+    mockCreateTournamentClone.mockResolvedValue(false);
     const result = await synthesizeImplementation(
       baseTask, baseCandidates, baseSemanticAnalysis,
       baseConfig, projectRoot, tournamentDir, taskDir, baseCommit,
     );
     expect(result.success).toBe(false);
-    expect(result.rationale).toContain('worktree');
+    expect(result.rationale).toContain('clone');
     expect(result.worktreePath).toBeUndefined();
     expect(mockCallClaude).not.toHaveBeenCalled();
   });
@@ -423,8 +423,8 @@ describe('analyzeSemanticConvergence', () => {
 
 describe('synthesis score comparison', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
     mockGetWorktreeChangedFiles.mockReset();
     mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
     mockGetWorktreeDiff.mockReset();
@@ -483,8 +483,8 @@ describe('synthesis score comparison', () => {
 
 describe('SynthesisMetadata integration', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
     mockGetWorktreeChangedFiles.mockReset();
     mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
     mockGetWorktreeDiff.mockReset();
@@ -552,14 +552,14 @@ afterAll(() => {
 
 describe('runTournament integration — single competitor', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
     mockGetWorktreeChangedFiles.mockReset();
     mockGetWorktreeChangedFiles.mockResolvedValue(['file1.ts']);
     mockGetWorktreeDiff.mockReset();
     mockGetWorktreeDiff.mockResolvedValue('diff --git a/file1.ts\n+added');
-    mockRemoveWorktree.mockReset();
-    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockRemoveTournamentClone.mockReset();
+    mockRemoveTournamentClone.mockResolvedValue(undefined);
     mockCallClaude.mockReset();
     mockCallClaude.mockResolvedValue({
       type: 'result',
@@ -604,10 +604,10 @@ describe('runTournament integration — single competitor', () => {
 
 describe('runTournament integration — convergence below threshold', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
-    mockRemoveWorktree.mockReset();
-    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
+    mockRemoveTournamentClone.mockReset();
+    mockRemoveTournamentClone.mockResolvedValue(undefined);
     // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
@@ -688,10 +688,10 @@ describe('runTournament integration — convergence below threshold', () => {
 
 describe('runTournament integration — synthesis field present', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
-    mockRemoveWorktree.mockReset();
-    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
+    mockRemoveTournamentClone.mockReset();
+    mockRemoveTournamentClone.mockResolvedValue(undefined);
     // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
@@ -779,10 +779,10 @@ describe('runTournament integration — synthesis field present', () => {
 
 describe('runTournament integration — all competitors fail', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
-    mockRemoveWorktree.mockReset();
-    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
+    mockRemoveTournamentClone.mockReset();
+    mockRemoveTournamentClone.mockResolvedValue(undefined);
     // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);
@@ -824,8 +824,8 @@ describe('runTournament integration — all competitors fail', () => {
     expect(result).toBeNull();
 
     // removeWorktree should have been called for cleanup (2 competitor worktrees)
-    expect(mockRemoveWorktree).toHaveBeenCalled();
-    expect(mockRemoveWorktree.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mockRemoveTournamentClone).toHaveBeenCalled();
+    expect(mockRemoveTournamentClone.mock.calls.length).toBeGreaterThanOrEqual(2);
 
     // Only 2 callClaude calls should have been made (competitor implementations only)
     // No synthesis-related calls (semantic analysis, synthesis, or judge)
@@ -835,10 +835,10 @@ describe('runTournament integration — all competitors fail', () => {
 
 describe('runTournament integration — synthesis fails, falls back to judge', () => {
   beforeEach(() => {
-    mockCreateWorktree.mockReset();
-    mockCreateWorktree.mockResolvedValue(true);
-    mockRemoveWorktree.mockReset();
-    mockRemoveWorktree.mockResolvedValue(undefined);
+    mockCreateTournamentClone.mockReset();
+    mockCreateTournamentClone.mockResolvedValue(true);
+    mockRemoveTournamentClone.mockReset();
+    mockRemoveTournamentClone.mockResolvedValue(undefined);
     // Re-init budget for each test
     mockResolveVerificationCommands.mockReset();
     mockResolveVerificationCommands.mockReturnValue(['bun test']);

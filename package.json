@@ -1,6 +1,6 @@
 {
   "name": "convergent",
-  "version": "2.5.1",
+  "version": "2.6.0",
   "description": "Autonomous development orchestrator using convergent evolution — multiple AI personas independently design solutions, then synthesize the optimal implementation plan.",
   "type": "module",
   "bin": {

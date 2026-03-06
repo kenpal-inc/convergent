@@ -6,8 +6,8 @@ import { callClaude } from "./claude";
 import { recordCost } from "./budget";
 import { buildLearningsContext } from "./learnings";
 import {
-  createWorktree,
-  removeWorktree,
+  createTournamentClone,
+  removeTournamentClone,
   getWorktreeChangedFiles,
   getWorktreeDiff,
 } from "./git";
@@ -291,19 +291,15 @@ export async function runTournament(
   for (let i = 0; i < numCompetitors; i++) {
     const strategy = strategyIds[i];
     const wtPath = join(tournamentDir, `c-${i}`);
-    const ok = await createWorktree(projectRoot, wtPath, baseCommit);
+    const ok = await createTournamentClone(projectRoot, wtPath, baseCommit);
     if (!ok) {
-      log.error(`  Failed to create worktree c-${i}`);
+      log.error(`  Failed to create clone c-${i}`);
       for (const wt of worktrees) {
-        await removeWorktree(projectRoot, wt.path);
+        await removeTournamentClone(wt.path);
       }
       try { rmSync(tournamentDir, { recursive: true, force: true }); } catch { /* ignore */ }
       return null;
     }
-    // Create .claude/ dir inside the worktree so Claude CLI treats it as project root.
-    // Without this, Claude CLI follows the .git gitdir reference back to the main repo's
-    // .claude/ and writes all files there instead of in the worktree.
-    mkdirSync(join(wtPath, ".claude"), { recursive: true });
     worktrees.push({ id: i, strategy, path: wtPath });
   }
 
@@ -442,7 +438,7 @@ export async function runTournament(
   if (candidates.length === 0) {
     log.error("  All competitors failed — no winner");
     for (const wt of worktrees) {
-      await removeWorktree(projectRoot, wt.path);
+      await removeTournamentClone(wt.path);
     }
     try { rmSync(tournamentDir, { recursive: true, force: true }); } catch { /* ignore */ }
     return null;
@@ -625,10 +621,10 @@ export async function runTournament(
 
   // --- Cleanup worktrees and temp directory ---
   if (synthWorktreePath) {
-    await removeWorktree(projectRoot, synthWorktreePath).catch(() => {});
+    await removeTournamentClone(synthWorktreePath).catch(() => {});
   }
   for (const wt of worktrees) {
-    await removeWorktree(projectRoot, wt.path);
+    await removeTournamentClone(wt.path);
   }
   try { rmSync(tournamentDir, { recursive: true, force: true }); } catch { /* ignore */ }
 
@@ -899,11 +895,10 @@ export async function synthesizeImplementation(
     // Step 1: Create synthesis worktree
     synthPath = join(tournamentDir, 'synthesis');
     log.info(`  Creating synthesis worktree at ${synthPath}`);
-    const wtOk = await createWorktree(projectRoot, synthPath, baseCommit);
+    const wtOk = await createTournamentClone(projectRoot, synthPath, baseCommit);
     if (!wtOk) {
-      return failResult('Failed to create synthesis worktree');
+      return failResult('Failed to create synthesis clone');
     }
-    mkdirSync(join(synthPath, ".claude"), { recursive: true });
 
     // Step 2: Build synthesis prompt
     const prompt = buildSynthesisPrompt(task, candidates, semanticAnalysis);

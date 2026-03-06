@@ -205,33 +205,41 @@ export async function gitRevertChanges(projectRoot: string, baseCommit?: string)
   }
 }
 
-// --- Worktree operations for tournament ---
+// --- Lightweight clone operations for tournament ---
+// We use `git clone --shared` instead of worktrees because Claude CLI
+// resolves project root via git internals (e.g. git-common-dir).
+// Worktrees always reference the main repo's .git/, causing Claude CLI
+// to write files to the main repo instead of the worktree.
+// Shared clones have independent .git/ dirs while reusing objects via hardlinks.
 
-export async function createWorktree(
+export async function createTournamentClone(
   projectRoot: string,
-  worktreePath: string,
+  clonePath: string,
   baseCommit: string,
 ): Promise<boolean> {
-  const result = await run(
-    ["worktree", "add", worktreePath, baseCommit, "--detach"],
+  const cloneResult = await run(
+    ["clone", "--shared", "--no-checkout", projectRoot, clonePath],
     projectRoot,
   );
-  if (result.exitCode !== 0) {
-    log.error(`Failed to create worktree at ${worktreePath}: ${result.stderr}`);
+  if (cloneResult.exitCode !== 0) {
+    log.error(`Failed to clone for tournament at ${clonePath}: ${cloneResult.stderr}`);
+    return false;
+  }
+  const checkoutResult = await run(["checkout", baseCommit, "--detach"], clonePath);
+  if (checkoutResult.exitCode !== 0) {
+    log.error(`Failed to checkout ${baseCommit} in ${clonePath}: ${checkoutResult.stderr}`);
     return false;
   }
   return true;
 }
 
-export async function removeWorktree(
-  projectRoot: string,
-  worktreePath: string,
+export async function removeTournamentClone(
+  clonePath: string,
 ): Promise<void> {
-  await run(["worktree", "remove", worktreePath, "--force"], projectRoot);
-  // Clean up stale core.worktree that git may have written to .git/config
-  // during `git worktree add --detach`. If left behind after removal,
-  // this poisoned path breaks ALL subsequent git commands.
-  await run(["config", "--unset", "core.worktree"], projectRoot);
+  try {
+    const { rmSync } = await import("fs");
+    rmSync(clonePath, { recursive: true, force: true });
+  } catch { /* ignore */ }
 }
 
 export async function getWorktreeDiff(worktreePath: string): Promise<string> {
