@@ -300,6 +300,10 @@ export async function runTournament(
       try { rmSync(tournamentDir, { recursive: true, force: true }); } catch { /* ignore */ }
       return null;
     }
+    // Create .claude/ dir inside the worktree so Claude CLI treats it as project root.
+    // Without this, Claude CLI follows the .git gitdir reference back to the main repo's
+    // .claude/ and writes all files there instead of in the worktree.
+    mkdirSync(join(wtPath, ".claude"), { recursive: true });
     worktrees.push({ id: i, strategy, path: wtPath });
   }
 
@@ -899,6 +903,7 @@ export async function synthesizeImplementation(
     if (!wtOk) {
       return failResult('Failed to create synthesis worktree');
     }
+    mkdirSync(join(synthPath, ".claude"), { recursive: true });
 
     // Step 2: Build synthesis prompt
     const prompt = buildSynthesisPrompt(task, candidates, semanticAnalysis);
