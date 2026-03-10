@@ -28,7 +28,7 @@ import { recordReviewLearning, recordFailureLearning } from "./src/learnings";
 import { runIntegrationCheck } from "./src/phaseF";
 import type { CliArgs, Config, Task, TaskQueue, TournamentMetrics } from "./src/types";
 
-const VERSION = "2.6.0";
+const VERSION = "2.7.0";
 const SCRIPT_DIR = dirname(new URL(import.meta.url).pathname);
 const LIB_DIR = resolve(SCRIPT_DIR, "lib");
 const TEMPLATES_DIR = resolve(SCRIPT_DIR, "templates");
@@ -792,7 +792,10 @@ async function main(): Promise<void> {
           log.phase(`Review: '${task.title}'${reviewAttempt > 0 ? ` (attempt ${reviewAttempt + 1})` : ''}`);
 
           try {
-            const reviewResult = await runPhaseC(task.id, task, config, projectRoot, outputDir, TEMPLATES_DIR, retryInfo, baseCommit);
+            // Load project summary for reviewer context (best-effort)
+            const summaryPath = `${outputDir}/logs/phase0/project_summary.md`;
+            const projectSummary = existsSync(summaryPath) ? readFileSync(summaryPath, "utf-8") : undefined;
+            const reviewResult = await runPhaseC(task.id, task, config, projectRoot, outputDir, TEMPLATES_DIR, retryInfo, baseCommit, taskQueue.instructions, projectSummary);
 
             if (reviewResult.verdict === "approved") {
               log.ok(`Code review passed: ${reviewResult.summary}`);
