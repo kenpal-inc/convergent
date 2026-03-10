@@ -8,23 +8,16 @@ import type { Config, ReviewPersona, ReviewPersonaMap, ReviewCriterionCheck, Rev
 // Fallback system prompt for single-reviewer mode (when no review personas configured)
 const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer performing a semantic review of implementation changes.
 
-You have been given:
-1. The task description and acceptance criteria that define "done"
-2. The actual git diff showing what was implemented
-3. Verification results (lint/typecheck/test already passed)
+You have been given the task description, acceptance criteria, git diff, and verification results. Mechanical checks (lint, types, tests) have already passed. You also have access to the codebase — use your tools to read files when the diff alone is insufficient.
 
-Your job is to perform a SEMANTIC review - mechanical checks (lint, types, tests) have already passed. Focus on:
+Perform a SEMANTIC review. Think adversarially — assume there is at least one subtle issue and try to find it.
 
-1. TASK COMPLIANCE: Does the diff implement what the task requires? Are there missing pieces? Extra changes beyond the scope?
-2. ACCEPTANCE CRITERIA: Does each criterion appear to be satisfied by the changes?
-3. CODE QUALITY ISSUES: Look for:
-   - Unnecessary changes (files modified beyond what the task requires)
-   - Security problems (hardcoded secrets, SQL injection, XSS, missing input validation)
-   - Missing error handling for critical paths
-   - Broken patterns (inconsistency with surrounding codebase conventions)
-   - Dead code or debug artifacts left behind
-   - Overly broad changes that could cause regressions
-4. COMPLETENESS: Does the diff fully address the task description?
+1. TASK COMPLIANCE: Does the diff implement what the task requires? Missing pieces? Extra changes beyond scope?
+2. ACCEPTANCE CRITERIA: Does each criterion appear to be satisfied?
+3. CORRECTNESS: Trace execution paths. What happens with empty input? Null? Concurrent access? Boundary values?
+4. SECURITY: Think like an attacker. Trace trust boundaries. Who controls the data? What if they're malicious? Are authorization checks actually enforced? Are permissions scoped to minimum necessary access?
+5. CODEBASE CONSISTENCY: Read the surrounding code. Does the new code follow established patterns for naming, error handling, query patterns, data access, and constraints?
+6. COMPLETENESS: Does the diff fully address the task?
 
 Be practical. Minor style issues that passed linting are not worth flagging. Focus on issues that would matter in a real code review.
 
@@ -39,6 +32,8 @@ interface ReviewContext {
   reviewSchema: object;
   /** Snapshot of current diff for differential comparison on retries */
   diffSnapshot: string;
+  /** Project root for codebase-aware review (tool access) */
+  projectRoot: string;
 }
 
 export interface ReviewRetryInfo {
@@ -64,6 +59,8 @@ async function prepareReviewContext(
   templatesDir: string,
   retryInfo?: ReviewRetryInfo,
   baseCommit?: string,
+  instructions?: string,
+  projectSummary?: string,
 ): Promise<{ context: ReviewContext; earlyReturn?: never } | { context?: never; earlyReturn: ReviewResult }> {
   const taskDir = `${outputDir}/logs/task-${taskId}`;
 
@@ -110,6 +107,14 @@ async function prepareReviewContext(
       + `\n... [truncated, ${gitDiff.length} total chars]`;
   }
 
+  // Build optional context sections
+  const instructionsSection = instructions
+    ? `\n## User Instructions (non-functional requirements from the project owner)\n${instructions}\n`
+    : "";
+  const summarySection = projectSummary
+    ? `\n## Project Summary (codebase architecture and conventions)\n${projectSummary}\n`
+    : "";
+
   let prompt: string;
 
   if (retryInfo) {
@@ -123,7 +128,7 @@ ${acceptanceCriteria || "(none specified)"}
 
 ## Expected Context Files
 ${contextFiles || "(none specified)"}
-
+${instructionsSection}${summarySection}
 ## Previous Review Feedback (issues that were supposed to be fixed)
 ${retryInfo.previousFeedback}
 
@@ -153,7 +158,7 @@ ${acceptanceCriteria || "(none specified)"}
 
 ## Expected Context Files
 ${contextFiles || "(none specified)"}
-
+${instructionsSection}${summarySection}
 ## Git Diff Summary (--stat)
 ${gitDiffStat}
 
@@ -164,10 +169,11 @@ ${diffForReview}
 ${verifyLog}
 
 ## Instructions
-Review the git diff against the task description and acceptance criteria. Determine whether to approve or request changes.`;
+Review the git diff against the task description and acceptance criteria. Determine whether to approve or request changes.
+You have access to the codebase — use your tools to read files and understand surrounding context when the diff alone is insufficient to judge correctness, security, or consistency with existing patterns.`;
   }
 
-  return { context: { prompt, reviewSchema, diffSnapshot: gitDiff } };
+  return { context: { prompt, reviewSchema, diffSnapshot: gitDiff, projectRoot } };
 }
 
 // --- Single persona review execution ---
@@ -188,7 +194,7 @@ async function runSingleReview(
     model: config.models.executor,
     maxBudgetUsd: config.budget.per_review_persona_max_usd ?? config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
-    tools: "",
+    cwd: reviewContext.projectRoot,
     timeoutMs,
     logFile: `${taskDir}/review-${personaId}.log`,
   });
@@ -313,7 +319,7 @@ async function runSingleReviewLegacy(
     model: config.models.executor,
     maxBudgetUsd: config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
-    tools: "",
+    cwd: reviewContext.projectRoot,
     logFile: `${taskDir}/review.log`,
   });
 
@@ -349,6 +355,8 @@ export async function runPhaseC(
   templatesDir: string,
   retryInfo?: ReviewRetryInfo,
   baseCommit?: string,
+  instructions?: string,
+  projectSummary?: string,
 ): Promise<ReviewResult> {
   const taskDir = `${outputDir}/logs/task-${taskId}`;
   mkdirSync(taskDir, { recursive: true });
@@ -356,7 +364,7 @@ export async function runPhaseC(
   log.phase(`Phase C: Code review for '${task.title}'`);
 
   // Prepare shared context
-  const prepared = await prepareReviewContext(taskId, task, outputDir, projectRoot, templatesDir, retryInfo, baseCommit);
+  const prepared = await prepareReviewContext(taskId, task, outputDir, projectRoot, templatesDir, retryInfo, baseCommit, instructions, projectSummary);
   if (prepared.earlyReturn) {
     return prepared.earlyReturn;
   }
