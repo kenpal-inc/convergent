@@ -194,6 +194,7 @@ async function runSingleReview(
     model: config.models.executor,
     maxBudgetUsd: config.budget.per_review_persona_max_usd ?? config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
+    tools: "Read,Glob,Grep,Bash",
     cwd: reviewContext.projectRoot,
     timeoutMs,
     logFile: `${taskDir}/review-${personaId}.log`,
@@ -319,6 +320,7 @@ async function runSingleReviewLegacy(
     model: config.models.executor,
     maxBudgetUsd: config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
+    tools: "Read,Glob,Grep,Bash",
     cwd: reviewContext.projectRoot,
     logFile: `${taskDir}/review.log`,
   });
