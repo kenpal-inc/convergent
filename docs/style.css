@@ -716,12 +716,6 @@ code {
   color: var(--text-muted);
 }
 
-.footer-formula {
-  font-family: var(--font-mono);
-  color: var(--accent);
-  opacity: 0.5;
-}
-
 /* ========================================
    Language Switcher
    ======================================== */
