@@ -8,7 +8,7 @@ import type { Config, ReviewPersona, ReviewPersonaMap, ReviewCriterionCheck, Rev
 // Fallback system prompt for single-reviewer mode (when no review personas configured)
 const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer performing a semantic review of implementation changes.
 
-You have been given the task description, acceptance criteria, git diff, and verification results. Mechanical checks (lint, types, tests) have already passed. You also have access to the codebase — use your tools to read files when the diff alone is insufficient.
+You have been given the task description, acceptance criteria, git diff, and verification results. Mechanical checks (lint, types, tests) have already passed. You also have read-only access to the codebase — use your tools to read files when the diff alone is insufficient.
 
 Perform a SEMANTIC review. Think adversarially — assume there is at least one subtle issue and try to find it.
 
@@ -111,8 +111,9 @@ async function prepareReviewContext(
   const instructionsSection = instructions
     ? `\n## User Instructions (non-functional requirements from the project owner)\n${instructions}\n`
     : "";
+  const MAX_SUMMARY_CHARS = 10_000;
   const summarySection = projectSummary
-    ? `\n## Project Summary (codebase architecture and conventions)\n${projectSummary}\n`
+    ? `\n## Project Summary (codebase architecture and conventions)\n${projectSummary.slice(0, MAX_SUMMARY_CHARS)}${projectSummary.length > MAX_SUMMARY_CHARS ? "\n... [truncated]" : ""}\n`
     : "";
 
   let prompt: string;
@@ -170,7 +171,7 @@ ${verifyLog}
 
 ## Instructions
 Review the git diff against the task description and acceptance criteria. Determine whether to approve or request changes.
-You have access to the codebase — use your tools to read files and understand surrounding context when the diff alone is insufficient to judge correctness, security, or consistency with existing patterns.`;
+You have read-only access to the codebase — use your tools to read files and understand surrounding context when the diff alone is insufficient to judge correctness, security, or consistency with existing patterns.`;
   }
 
   return { context: { prompt, reviewSchema, diffSnapshot: gitDiff, projectRoot } };
@@ -194,7 +195,7 @@ async function runSingleReview(
     model: config.models.executor,
     maxBudgetUsd: config.budget.per_review_persona_max_usd ?? config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
-    tools: "Read,Glob,Grep,Bash",
+    tools: "Read,Glob,Grep",
     cwd: reviewContext.projectRoot,
     timeoutMs,
     logFile: `${taskDir}/review-${personaId}.log`,
@@ -320,7 +321,7 @@ async function runSingleReviewLegacy(
     model: config.models.executor,
     maxBudgetUsd: config.budget.review_max_usd ?? 2.00,
     jsonSchema: reviewContext.reviewSchema,
-    tools: "Read,Glob,Grep,Bash",
+    tools: "Read,Glob,Grep",
     cwd: reviewContext.projectRoot,
     logFile: `${taskDir}/review.log`,
   });
